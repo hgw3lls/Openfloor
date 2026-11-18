@@ -13,13 +13,27 @@ Open Floor lets artists submit topics, optionally vote for up to two, and see th
 
 **First time:** open the site and use **Set up the group** with the organizer key (`ORGANIZER_KEY`) to become the first organizer. You're signed in on that device. The key can sign an organizer in again later if they lose access.
 
-**Members.** Organizers add people on the **Members** page (one per line, `Name <email>`). Each person gets an invitation to accept, so nobody is added without agreeing. People can also ask to join from the front page; organizers approve them, and they get a welcome email. Members sign in with a link sent by email, with no passwords, and stay signed in for a year. Organizers can make other members organizers.
+**Members.** Organizers add people on the **Members** page (one per line, `Name <email>`). Each person gets an invitation to accept, so nobody is added without agreeing. People can also ask to join from the front page; organizers approve them, and they get a welcome email. Members sign in with a link sent by email, with no passwords, and stay signed in for a year. There can be any number of organizers: on the Organizer page, pick a member and tap **Make organizer**, or invite someone new with **Make them organizers** ticked on the Members page (they get organizer powers when they accept). New organizers get an email, join requests go to every organizer, and organizers can step down, but the group always keeps at least one.
 
 **Meetings.** Organizers create meetings from the dashboard: name, date and time, time zone, length, place, and whether the meeting repeats weekly, every two weeks or monthly (same weekday). Every member gets an email with RSVP buttons. Repeating meetings create the next one automatically after each meeting ends.
 
 **RSVP.** Members answer Going, Maybe or Can't make it, on the site or with one tap from email. Declining needs a reason, which only organizers see. Organizers see who's coming, who declined and why, and who hasn't answered, and can email a reminder to people who haven't answered.
 
 **Topics and voting.** Members suggest topics and vote 👍 or 👎 until the agenda is published, one vote each and never on their own topics. Votes from email count as the same person as votes on the site. Organizers can edit, hide or delete any topic, build the agenda from the top topics, publish it (members get it by email with calendar links), and record and email the outcomes.
+
+## Organizer panel and member preview
+
+Organizers have an **Organizer** link in the top bar. It opens an overview of what needs attention: join requests, overdue and unassigned action items, events still needing helpers, and email problems. Below that are upcoming meetings with RSVP counts, a new-meeting form, quick links, downloads, and email health (sent today against the limit, waiting, retrying, failed, and when replies were last checked).
+
+Member pages stay clean. On a meeting or event page, organizers see a slim bar with **Manage this meeting** (or event), which opens that item's own organizer page: attendance, topics with vote counts and moderation, the agenda builder, outcomes and action items, carry-over, and details.
+
+**Preview as member** (top bar) shows every page exactly as a regular member sees it, with a banner to leave preview.
+
+## Events and sign-ups
+
+Any member can add an event (show, opening, workshop, workday, social) on the **Events** page. Events appear on the dashboard, in members' summaries and in everyone's calendar link. Organizers can also email everyone about an event straight away.
+
+An event can have sign-up slots, like "Gallery sitting, Saturday 12–3" for 2 people. Members sign up or drop out on the site or with one tap from an email; slots can't be overfilled. Volunteers get a reminder the day before their slot, and their sign-ups show on their dashboard and calendar. Organizers can **Ask for help**, which emails members who haven't signed up yet, listing the open slots. The person who added an event and organizers can edit it and manage its slots. Each event has a discussion, and replying to an event email adds to it.
 
 ## Follow-through
 

@@ -294,3 +294,38 @@ test('old organizer links keep working for their own meeting', async () => {
   assert.equal((await w.guest.call('notes', {notes: 'x'}, {...M, secret: secret.slice(0, -1) + '0'})).status, 403);
   assert.equal((await w.guest.call('notes', {notes: 'x'}, {...M, secret})).status, 200);
 });
+
+test('several organizers: invite as organizer, promote, notify, all get join requests, never zero', async () => {
+  const w = await world();
+  // Invite someone new straight in as an organizer: no powers until they accept.
+  w.mailer.outbox.length = 0;
+  const r = await w.org.group('add', {people: 'Dee <dee@example.org>\nana@example.org', role: 'organizer'});
+  assert.equal(r.body.notice, 'Invited 1 person as organizers; made 1 existing member an organizer.');
+  const invite = w.mailer.outbox.find(m => m.to === 'dee@example.org');
+  assert.match(invite.html, /as an <strong>organizer<\/strong>/);
+  assert.match(w.mailer.outbox.find(m => m.to === 'ana@example.org').subject, /^You’re now an organizer/);
+  const dee = (await w.org.group()).body.members.find(m => m.email === 'dee@example.org');
+  assert.deepEqual([dee.role, dee.status], ['organizer', 'invited']);
+  const accepted = await visit(w.db, link('confirm', invite.html), 'POST');
+  const deeClient = client(w.db, w.mailer, {session: accepted.cookie.match(/session=([a-f0-9]{64})/)[1]});
+  assert.equal((await deeClient.group()).body.me.role, 'organizer');
+  assert.equal((await deeClient.call('', {title: 'Dee’s meeting'})).status, 201, 'organizer powers after accepting');
+  assert.equal((await w.ana.call('', {title: 'Ana’s meeting'})).status, 201, 'promoted member too');
+
+  // Every organizer hears about join requests.
+  w.mailer.outbox.length = 0;
+  await w.guest.group('join', {name: 'Cara', email: 'cara@example.org'});
+  assert.deepEqual(w.mailer.outbox.map(m => m.to).sort(), ['ana@example.org', 'dee@example.org', 'org@example.org']);
+
+  // Promote and demote with the role button; an email on promotion.
+  const ben = (await w.org.group()).body.members.find(m => m.email === 'ben@example.org');
+  w.mailer.outbox.length = 0;
+  await w.org.group('role', {member: ben.id, role: 'organizer'});
+  assert.match(w.mailer.outbox[0].subject, /^You’re now an organizer/);
+  assert.equal((await w.ben.group('role', {member: ben.id, role: 'member'})).status, 200, 'organizers can step down');
+  // Never zero organizers.
+  const all = (await w.org.group()).body.members.filter(m => m.role === 'organizer' && m.status === 'active');
+  for (const m of all.filter(m => m.email !== 'org@example.org')) await w.org.group('role', {member: m.id, role: 'member'});
+  const olu = (await w.org.group()).body.members.find(m => m.email === 'org@example.org');
+  assert.equal((await w.org.group('role', {member: olu.id, role: 'member'})).status, 409);
+});
