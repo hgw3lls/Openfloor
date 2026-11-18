@@ -18,7 +18,7 @@ test('Gmail-style SMTP sending: sender, headers, and per-message failures', asyn
     const results = await createMailer(env).sendEach(msgs);
     assert.deepEqual(results.map(r => r.ok), [true, false, true], 'one bad address does not stop the rest');
     assert.deepEqual(got.map(g => g.to[0]), ['ana@example.org', 'bo@example.org']);
-    assert.match(got[0].raw, /From: Open Floor <me@gmail.com>/);
+    assert.match(got[0].raw, /From: Tower Press Artist Group <me@gmail.com>/);
     assert.match(got[0].raw, /List-Unsubscribe:\s+<https:\/\/x.test\/api\/email\?a=unsub/);
     assert.match(got[0].raw, /List-Unsubscribe-Post: List-Unsubscribe=One-Click/);
     const wrong = await createMailer({...env, SMTP_PASS: 'wrong'}).sendEach(msgs.slice(0, 1));

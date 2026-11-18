@@ -3,6 +3,8 @@ import {readFileSync} from 'node:fs';
 import {wrap} from '../lib/db.mjs';
 import {meetings} from '../lib/meetings.mjs';
 import {links} from '../lib/links.mjs';
+import {group} from '../lib/group.mjs';
+import {newToken, startSession} from '../lib/auth.mjs';
 
 export const ORIGIN = 'https://floor.test', KEY = 'orgkey';
 
@@ -27,27 +29,37 @@ export function fakeMailer() {
   return mailer;
 }
 
-export function client(db, mailer, {cookie, ip = '203.0.113.1'} = {}) {
+// Creates a member directly and returns their session cookie value.
+export async function member(db, email, {role = 'member', status = 'active', name = '', emails = 'all'} = {}) {
+  const id = crypto.randomUUID(), token = newToken();
+  await db.prepare('INSERT INTO members (id,email,name,role,status,emails,token,created) VALUES (?,?,?,?,?,?,?,?)')
+    .bind(id, email, name, role, status, emails, token, Date.now()).run();
+  const cookie = await startSession(db, id);
+  return {id, email, token, session: cookie.match(/session=([a-f0-9]{64})/)[1]};
+}
+
+export function client(db, mailer, {session, ip = '203.0.113.1'} = {}) {
   const pending = [];
   const defer = promise => pending.push(promise);
-  async function call(action, payload, {meeting = '', secret} = {}) {
-    const headers = {Origin: ORIGIN, 'x-forwarded-for': ip};
-    if (cookie) headers.Cookie = 'floor=' + cookie;
-    if (secret) headers.Authorization = 'Bearer ' + secret;
+  async function send(handler, path, params, payload, extra = {}) {
+    const headers = {Origin: ORIGIN, 'x-forwarded-for': ip, ...extra};
+    if (session) headers.Cookie = 'session=' + session;
     if (payload !== undefined) headers['Content-Type'] = 'application/json';
-    const query = new URLSearchParams({meeting, action});
-    const res = await meetings(new Request(ORIGIN + '/api/meeting?' + query, {method: payload === undefined ? 'GET' : 'POST', headers,
+    const res = await handler(new Request(ORIGIN + path + '?' + new URLSearchParams(params), {method: payload === undefined ? 'GET' : 'POST', headers,
       body: payload === undefined ? undefined : JSON.stringify(payload)}), db, KEY, mailer, defer);
     await Promise.all(pending.splice(0));
-    return {status: res.status, body: await res.json()};
+    return {status: res.status, body: await res.json(), cookie: res.headers.get('Set-Cookie')};
   }
-  return {call, get: meeting => call(undefined, undefined, meeting)};
+  const call = (action, payload, {meeting = '', secret} = {}) =>
+    send(meetings, '/api/meeting', {meeting, action}, payload, secret ? {Authorization: 'Bearer ' + secret} : {});
+  return {call, get: (meeting = {}) => call(undefined, undefined, meeting), group: (action = '', payload) => send(group, '/api/group', {action}, payload)};
 }
 
 export const link = (a, html) => html.match(new RegExp('href="([^"]*a=' + a + '[^"]*)"'))[1].replaceAll('&amp;', '&');
-export async function visit(db, url, method = 'GET', cookie) {
-  const headers = cookie ? {Cookie: 'floor=' + cookie} : {};
-  const r = await links(new Request(url, {method, headers}), db);
-  return {status: r.status, text: await r.text()};
+export async function visit(db, url, method = 'GET', form) {
+  const init = {method};
+  if (form) { init.body = new URLSearchParams(form).toString(); init.headers = {'Content-Type': 'application/x-www-form-urlencoded'}; }
+  const r = await links(new Request(url, init), db);
+  return {status: r.status, text: await r.text(), cookie: r.headers.get('Set-Cookie'), location: r.headers.get('Location')};
 }
-export const uuid = n => `${String(n).repeat(8).slice(0, 8)}-aaaa-4aaa-8aaa-${String(n).repeat(12).slice(0, 12)}`;
+export const uuidOf = n => `${String(n).repeat(8).slice(0, 8)}-aaaa-4aaa-8aaa-${String(n).repeat(12).slice(0, 12)}`;

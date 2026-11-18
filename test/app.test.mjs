@@ -1,21 +1,31 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {setup, fakeMailer, client, link, visit, uuid, ORIGIN, KEY} from './helpers.mjs';
+import {setup, fakeMailer, client, member, link, visit, ORIGIN, KEY} from './helpers.mjs';
 import {daily} from '../lib/cron.mjs';
 import {flush} from '../lib/outbox.mjs';
-import {calendarFile, zonedToUtc} from '../lib/schedule.mjs';
+import {parseMembers} from '../lib/group.mjs';
+import {calendarFile, zonedToUtc, nextOccurrence} from '../lib/schedule.mjs';
 
-const ALICE = uuid(1), BEN = uuid(2), CARA = uuid(3), ORG = uuid(4);
+const later = (days, hourUtc = 0) => { const d = new Date(Date.now() + days * 86400000); d.setUTCHours(hourUtc, 0, 0, 0); return d; };
+const localNY = date => new Intl.DateTimeFormat('sv-SE', {timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'}).format(date).replace(' ', 'T');
 
-async function newMeeting(db, mailer) {
-  const org = client(db, mailer, {cookie: ORG});
-  const created = await org.call('', {organizerKey: KEY, title: 'Spring show'});
-  assert.equal(created.status, 201);
-  const M = {meeting: created.body.id}, A = {...M, secret: created.body.secret};
-  return {org, M, A};
+// A group with an organizer and two members; returns clients for each.
+async function world() {
+  const {db, pg} = await setup();
+  const mailer = fakeMailer();
+  const o = await member(db, 'org@example.org', {role: 'organizer', name: 'Olu'});
+  const a = await member(db, 'ana@example.org', {name: 'Ana'});
+  const b = await member(db, 'ben@example.org', {name: 'Ben'});
+  return {db, pg, mailer, o, a, b, org: client(db, mailer, {session: o.session}),
+    ana: client(db, mailer, {session: a.session}), ben: client(db, mailer, {session: b.session}), guest: client(db, mailer)};
+}
+async function newMeeting(w, fields = {}) {
+  const created = await w.org.call('', {title: 'Spring show', local: localNY(later(10)), timezone: 'America/New_York', duration: '90', ...fields});
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  return {meeting: created.body.id};
 }
 
-test('migration carries old votes over once and can run again', async () => {
+test('migration: old votes and email subscribers carry over, and it can run again', async () => {
   const {pg} = await setup({legacy: async pg => {
     await pg.query("INSERT INTO meetings (id,secret,title,schedule) VALUES ('m1','s','Old','')");
     await pg.query("INSERT INTO topics (id,meeting,label,detail,kind,created) VALUES ('t1','m1','Old topic','','Update',1)");
@@ -24,234 +34,263 @@ test('migration carries old votes over once and can run again', async () => {
   assert.equal((await pg.query('SELECT count(*)::int n FROM ballots')).rows[0].n, 1);
 });
 
-test('voting: up/down, toggling, sorting, hidden counts, no voting on your own topic', async () => {
+test('first organizer: setup with the organizer key signs you in', async () => {
   const {db} = await setup();
-  const mailer = fakeMailer();
-  const {M, A, org} = await newMeeting(db, mailer);
-  const alice = client(db, mailer, {cookie: ALICE}), ben = client(db, mailer, {cookie: BEN});
-  await alice.call('topic', {label: 'Budget', detail: 'Money', kind: 'Decision'}, M);
-  await alice.call('topic', {label: 'Poster', kind: 'Discussion'}, M);
-  let g = await ben.get(M);
-  const [t1, t2] = g.body.topics;
-  assert.equal(t1.up, null, 'counts hidden from participants');
-  assert.equal(t1.own, false);
-  assert.equal((await ben.call('vote', {topic: t2.id, value: 1}, M)).status, 200);
-  await ben.call('vote', {topic: t1.id, value: -1}, M);
-  g = await ben.get(M);
-  assert.equal(g.body.topics[0].id, t2.id, 'up-voted topic sorts first');
-  assert.equal(g.body.topics[0].mine, 1);
-  await ben.call('vote', {topic: t2.id, value: 0}, M);
-  assert.equal((await ben.get(M)).body.topics.find(t => t.id === t2.id).mine, 0, 'vote removed');
-  await ben.call('vote', {topic: t2.id, value: 1}, M);
-
-  // Alice suggested both topics: she can't vote on them.
-  const mine = (await alice.get(M)).body.topics;
-  assert.ok(mine.every(t => t.own), 'author sees own topics marked');
-  const own = await alice.call('vote', {topic: t1.id, value: 1}, M);
-  assert.equal(own.status, 403);
-  assert.match(own.body.error, /your own topic/);
-
-  g = await org.get(A);
-  assert.equal(g.body.topics[0].up, 1, 'organizer sees counts');
+  const guest = client(db, fakeMailer());
+  assert.equal((await guest.group()).body.needsSetup, true);
+  assert.equal((await guest.group('setup', {organizerKey: 'wrong', name: 'Olu', email: 'o@example.org'})).status, 403);
+  const ok = await guest.group('setup', {organizerKey: KEY, name: 'Olu', email: 'O@example.org'});
+  assert.equal(ok.status, 200);
+  const session = ok.cookie.match(/session=([a-f0-9]{64})/)[1];
+  const me = await client(db, null, {session}).group();
+  assert.deepEqual([me.body.me.email, me.body.me.role, me.body.needsSetup], ['o@example.org', 'organizer', false]);
 });
 
-test('moderation: organizers edit, hide and delete topics; participants cannot', async () => {
-  const {db} = await setup();
-  const {M, A, org} = await newMeeting(db, fakeMailer());
-  const ben = client(db, null, {cookie: BEN});
-  await ben.call('topic', {label: 'Spam spam'}, M);
-  await ben.call('topic', {label: 'Real topic'}, M);
-  const [spam, real] = (await org.get(A)).body.topics;
-  const cara = client(db, null, {cookie: CARA});
-  await cara.call('vote', {topic: spam.id, value: 1}, M);
-
-  assert.equal((await ben.call('topic-hide', {topic: spam.id, hidden: true}, M)).status, 403, 'participants cannot moderate');
-  assert.equal((await org.call('topic-hide', {topic: spam.id, hidden: true}, A)).status, 200);
-  assert.deepEqual((await cara.get(M)).body.topics.map(t => t.label), ['Real topic'], 'hidden from participants');
-  assert.equal((await org.get(A)).body.topics.find(t => t.id === spam.id).hidden, true, 'organizer still sees it');
-  assert.equal((await cara.call('vote', {topic: spam.id, value: 1}, M)).status, 409, 'no votes on hidden topics');
-
-  await org.call('topic-edit', {topic: real.id, label: 'Real topic, renamed', detail: 'More', kind: 'Update'}, A);
-  const edited = (await cara.get(M)).body.topics.find(t => t.id === real.id);
-  assert.deepEqual([edited.label, edited.detail, edited.kind], ['Real topic, renamed', 'More', 'Update']);
-  assert.equal((await org.call('topic-edit', {topic: real.id, label: ' '}, A)).status, 400);
-
-  assert.equal((await org.call('topic-delete', {topic: spam.id}, A)).status, 200);
-  assert.equal((await org.get(A)).body.topics.length, 1, 'deleted, votes and all');
+test('sign-in by email link: opening it does nothing, the button signs in, and it works once', async () => {
+  const w = await world();
+  const r = await w.guest.group('signin', {email: 'ana@example.org'});
+  assert.match(r.body.notice, /sign-in link is on its way/);
+  assert.equal((await w.guest.group('signin', {email: 'stranger@example.org'})).body.notice, r.body.notice, 'same answer for non-members');
+  assert.equal(w.mailer.outbox.length, 1, 'only members get a link');
+  const url = link('signin', w.mailer.outbox[0].html);
+  const opened = await visit(w.db, url);
+  assert.ok(!opened.cookie, 'GET does not sign in');
+  const signed = await visit(w.db, url, 'POST');
+  assert.equal(signed.status, 303);
+  const session = signed.cookie.match(/session=([a-f0-9]{64})/)[1];
+  assert.equal((await client(w.db, null, {session}).group()).body.me.email, 'ana@example.org');
+  assert.equal((await visit(w.db, url, 'POST')).status, 410, 'a link works once');
 });
 
-test('spam protection: honeypot, rate limits and the daily email budget', async () => {
-  const {db} = await setup();
-  const mailer = fakeMailer();
-  const {M} = await newMeeting(db, mailer);
-  const bot = client(db, mailer, {cookie: BEN, ip: '198.51.100.7'});
-  const trapped = await bot.call('subscribe', {email: 'victim@example.org', website: 'http://spam'}, M);
-  assert.equal(trapped.status, 200, 'bots get a normal-looking answer');
-  assert.equal(mailer.outbox.length, 0, 'but nothing is sent');
+test('joining: request, organizer approval with a welcome email, and organizer-only controls', async () => {
+  const w = await world();
+  const r = await w.guest.group('join', {name: 'Cara', email: 'cara@example.org'});
+  assert.match(r.body.notice, /organizer will review/);
+  assert.equal(w.mailer.outbox.length, 1);
+  assert.equal(w.mailer.outbox[0].to, 'org@example.org');
+  assert.match(w.mailer.outbox[0].subject, /Cara wants to join/);
+  const cara = (await w.org.group()).body.members.find(m => m.email === 'cara@example.org');
+  assert.equal(cara.status, 'requested');
+  assert.equal((await w.ana.group('approve', {member: cara.id})).status, 403, 'members cannot approve');
+  w.mailer.outbox.length = 0;
+  assert.equal((await w.org.group('approve', {member: cara.id})).status, 200);
+  assert.match(w.mailer.outbox[0].subject, /Welcome/);
+  assert.equal((await visit(w.db, link('signin', w.mailer.outbox[0].html), 'POST')).status, 303, 'welcome link signs in');
 
-  for (let i = 0; i < 5; i++) assert.equal((await bot.call('subscribe', {email: `p${i}@example.org`}, M)).status, 200);
-  assert.equal((await bot.call('subscribe', {email: 'p6@example.org'}, M)).status, 429, '6th sign-up in an hour is refused');
-  const other = client(db, mailer, {cookie: CARA, ip: '198.51.100.8'});
-  assert.equal((await other.call('subscribe', {email: 'p6@example.org'}, M)).status, 200, 'other visitors are unaffected');
-
-  for (let i = 0; i < 20; i++) await other.call('topic', {label: 'T' + i}, M);
-  assert.equal((await other.call('topic', {label: 'one too many'}, M)).status, 429);
-
-  process.env.EMAIL_DAILY_LIMIT = '6';
-  try {
-    const third = client(db, mailer, {cookie: ALICE, ip: '198.51.100.9'});
-    assert.equal((await third.call('subscribe', {email: 'last@example.org'}, M)).status, 429, 'daily budget reached');
-  } finally { delete process.env.EMAIL_DAILY_LIMIT; }
+  const bot = await w.guest.group('join', {name: 'Bot', email: 'bot@example.org', website: 'spam'});
+  assert.equal(bot.status, 200);
+  assert.ok(!(await w.org.group()).body.members.some(m => m.email === 'bot@example.org'), 'spam trap');
 });
 
-test('outbox: failed sends are retried; over-budget mail waits instead of being dropped', async () => {
-  const {db} = await setup();
-  const mailer = fakeMailer();
-  const {M} = await newMeeting(db, mailer);
-  mailer.failNext = 1;
-  await client(db, mailer, {cookie: BEN}).call('subscribe', {email: 'ben@example.org'}, M);
-  assert.equal(mailer.outbox.length, 0, 'first attempt failed');
-  const retry = await flush(db, mailer);
-  assert.deepEqual(retry, {sent: 1, failed: 0});
-  assert.equal(mailer.outbox[0].to, 'ben@example.org');
+test('organizers add people; each accepts an invitation; organizer roles are protected', async () => {
+  const w = await world();
+  assert.deepEqual(parseMembers('Dee Diaz <dee@example.org>\neve@example.org, Eve\nnot an email\ndee@example.org'),
+    [{email: 'dee@example.org', name: 'Dee Diaz'}, {email: 'eve@example.org', name: 'Eve'}]);
+  const r = await w.org.group('add', {people: 'Dee Diaz <dee@example.org>\nana@example.org'});
+  assert.equal(r.body.notice, 'Invited 1 person; 1 already on the list or recently invited.');
+  assert.equal(w.mailer.outbox[0].to, 'dee@example.org');
+  const accept = link('confirm', w.mailer.outbox[0].html);
+  assert.match((await visit(w.db, accept)).text, /Join .*\?/);
+  const joined = await visit(w.db, accept, 'POST');
+  assert.match(joined.text, /You’re in/);
+  assert.ok(joined.cookie, 'accepting signs you in');
 
-  process.env.EMAIL_DAILY_LIMIT = '1';
-  try {
-    await db.prepare("INSERT INTO outbox (id,meeting,recipient,message,created,updated) VALUES ('x',?, 'z@example.org', ?, 1, 1)")
-      .bind(M.meeting, JSON.stringify({to: 'z@example.org', subject: 's', html: '', text: ''})).run();
-    assert.deepEqual(await flush(db, mailer), {sent: 0, failed: 0}, 'budget used up: waits');
-    assert.equal((await db.prepare("SELECT status FROM outbox WHERE id='x'").bind().first()).status, 'queued');
-  } finally { delete process.env.EMAIL_DAILY_LIMIT; }
+  const list = (await w.org.group()).body.members;
+  const dee = list.find(m => m.email === 'dee@example.org'), olu = list.find(m => m.email === 'org@example.org');
+  assert.equal(dee.status, 'active');
+  assert.equal((await w.org.group('role', {member: olu.id, role: 'member'})).status, 409, 'cannot demote the last organizer');
+  await w.org.group('role', {member: dee.id, role: 'organizer'});
+  assert.equal((await w.org.group('role', {member: olu.id, role: 'member'})).status, 200, 'fine once there is another');
 });
 
-test('email list end to end: confirm, digest, email votes, phases, schedule, agenda, reminder, outcomes, unsubscribe', async () => {
-  const {db, pg} = await setup();
-  const mailer = fakeMailer();
-  const {M, A, org} = await newMeeting(db, mailer);
-  const alice = client(db, mailer, {cookie: ALICE}), ben = client(db, mailer, {cookie: BEN});
+test('meetings: only organizers create them; members get an invitation with RSVP buttons', async () => {
+  const w = await world();
+  assert.equal((await w.ana.call('', {title: 'Nope'})).status, 403);
+  await member(w.db, 'quiet@example.org', {emails: 'none'});
+  const M = await newMeeting(w);
+  const to = w.mailer.outbox.map(m => m.to).sort();
+  assert.deepEqual(to, ['ana@example.org', 'ben@example.org', 'org@example.org'], 'members who turned email off are skipped');
+  const mail = w.mailer.outbox.find(m => m.to === 'ana@example.org');
+  assert.match(mail.subject, /^New meeting: Spring show/);
+  assert.equal((mail.html.match(/a=rsvp/g) || []).length, 3);
+  const dash = (await w.ana.group()).body.meetings.upcoming;
+  assert.equal(dash[0].id, M.meeting);
+  assert.equal(dash[0].mine, '');
+});
 
-  // Alice signs up on the site; her browser links her email to her topics.
-  let r = await alice.call('subscribe', {email: 'Alice@Example.org'}, M);
-  assert.equal(r.body.notice, 'Check your inbox to confirm.');
-  assert.equal(mailer.outbox.length, 1);
-  assert.equal(mailer.outbox[0].to, 'alice@example.org');
-  assert.ok(!mailer.outbox[0].headers, 'no unsubscribe header on the confirmation');
-  await alice.call('subscribe', {email: 'alice@example.org'}, M);
-  assert.equal(mailer.outbox.length, 1, 'no second confirmation within a day');
-  const confirm = link('confirm', mailer.outbox[0].html);
-  assert.match((await visit(db, confirm)).text, /Get email updates/);
-  assert.equal((await pg.query('SELECT status FROM subscribers')).rows[0].status, 'pending', 'opening the link changes nothing');
-  assert.match((await visit(db, confirm, 'POST', ALICE)).text, /on the list/);
-  assert.equal((await alice.call('subscribe', {email: 'alice@example.org'}, M)).body.notice, 'You are already getting updates.');
+test('RSVP: reasons required to decline, visible only to organizers; email RSVP is scanner-safe; nudge', async () => {
+  const w = await world();
+  const M = await newMeeting(w);
+  assert.equal((await w.guest.call('rsvp', {status: 'yes'}, M)).status, 401, 'sign in first');
+  assert.equal((await w.ana.call('rsvp', {status: 'no'}, M)).status, 400, 'decline needs a reason');
+  assert.equal((await w.ana.call('rsvp', {status: 'no', reason: 'Out of town for a residency'}, M)).status, 200);
+  await w.org.call('rsvp', {status: 'yes'}, M);
 
-  // Organizer invites Ben and Cara.
-  mailer.outbox.length = 0;
-  r = await org.call('invite', {emails: 'ben@example.org, bad, alice@example.org\ncara@example.org'}, A);
-  assert.equal(r.body.notice, 'Sending 2 confirmation emails. Skipped 1 invalid address.');
-  for (const m of mailer.outbox) await visit(db, link('confirm', m.html), 'POST');
-  await org.call('remove', {email: 'cara@example.org'}, A);
-  assert.deepEqual((await org.get(A)).body.subscribers.map(s => s.email + ':' + s.status), ['alice@example.org:active', 'ben@example.org:active']);
+  const seen = (await w.ben.get(M)).body.attendance;
+  assert.deepEqual(seen.going, ['Olu']);
+  assert.equal(seen.declined, undefined, 'members do not see declines or reasons');
+  const att = (await w.org.get(M)).body.attendance;
+  assert.deepEqual(att.declined, [{name: 'Ana', reason: 'Out of town for a residency'}]);
+  assert.deepEqual(att.noAnswer, ['Ben']);
 
-  // Daily digest: Alice's topic shows as hers in her email, with no vote buttons.
-  await alice.call('topic', {label: 'Budget'}, M);
-  await ben.call('topic', {label: 'Poster'}, M);
-  mailer.outbox.length = 0;
-  let rep = await daily(db, mailer, ORIGIN);
-  assert.equal(rep.sent, 2);
-  const aliceMail = mailer.outbox.find(m => m.to === 'alice@example.org'), benMail = mailer.outbox.find(m => m.to === 'ben@example.org');
-  assert.match(aliceMail.subject, /2 new topics/);
-  assert.equal((aliceMail.html.match(/a=vote/g) || []).length, 2, 'Alice: buttons only on Ben\'s topic');
-  assert.match(aliceMail.html, /Your topic/);
-  assert.equal((benMail.html.match(/a=vote/g) || []).length, 4, 'Ben was invited and never linked his browser, so the app cannot tell which topic is his');
-  rep = await daily(db, mailer, ORIGIN);
-  assert.equal(rep.emails, 0, 'topics announced once');
+  // Ben RSVPs from the invitation email.
+  const benMail = w.mailer.outbox.find(m => m.to === 'ben@example.org');
+  const rsvpUrl = link('rsvp', benMail.html);
+  assert.match((await visit(w.db, rsvpUrl)).text, /Can you make it/);
+  assert.deepEqual((await w.org.get(M)).body.attendance.noAnswer, ['Ben'], 'opening the link saves nothing');
+  assert.equal((await visit(w.db, rsvpUrl, 'POST', {status: 'no', reason: ''})).status, 400);
+  assert.match((await visit(w.db, rsvpUrl, 'POST', {status: 'maybe', reason: ''})).text, /marked: Maybe/);
+  assert.deepEqual((await w.org.get(M)).body.attendance.maybe, ['Ben']);
 
-  // Alice votes from email; it counts as the same person as on the site.
-  const voteUrl = link('vote', aliceMail.html);
-  assert.match((await visit(db, voteUrl)).text, /Confirm your vote/);
-  assert.match((await visit(db, voteUrl, 'POST')).text, /saved: 👍 up/);
-  const poster = (await alice.get(M)).body.topics.find(t => t.label === 'Poster');
-  assert.equal(poster.mine, 1, 'email vote shows as hers on the site');
-  await visit(db, voteUrl.replace('v=1', 'v=-1'), 'POST');
-  assert.equal((await pg.query('SELECT count(*)::int n FROM ballots')).rows[0].n, 1, 'changed, not duplicated');
+  await w.ben.call('rsvp', {status: 'yes'}, M);
+  w.mailer.outbox.length = 0;
+  const quiet = await member(w.db, 'late@example.org', {name: 'Lee'});
+  const n = await w.org.call('nudge', {}, M);
+  assert.equal(n.body.notice, 'Sending to 1 person.');
+  assert.equal(w.mailer.outbox[0].to, 'late@example.org');
+  assert.ok(quiet.id);
+});
 
-  // Ben's own topic can't be voted on from a forged link either, once his email is linked to his browser.
-  await pg.query("UPDATE subscribers SET voter=$1 WHERE email='ben@example.org'", ['c:' + BEN]);
-  const ownLink = link('vote', aliceMail.html).replace(/topic=[^&]+/, 'topic=' + poster.id).replace(/t=[^&]+/, 't=' + (await pg.query("SELECT token FROM subscribers WHERE email='ben@example.org'")).rows[0].token);
-  assert.equal((await visit(db, ownLink, 'POST')).status, 403);
+test('topics and voting: members only, one vote each, not on your own topic; email votes count as the same person', async () => {
+  const w = await world();
+  const M = await newMeeting(w);
+  assert.equal((await w.guest.call('topic', {label: 'x'}, M)).status, 401);
+  await w.ana.call('topic', {label: 'Budget', detail: 'Money', kind: 'Decision'}, M);
+  await w.ben.call('topic', {label: 'Poster'}, M);
+  const topics = (await w.ana.get(M)).body.topics;
+  const budget = topics.find(t => t.label === 'Budget'), poster = topics.find(t => t.label === 'Poster');
+  assert.equal(budget.own, true);
+  assert.equal(budget.up, null, 'counts hidden from members');
+  assert.equal((await w.ana.call('vote', {topic: budget.id, value: 1}, M)).status, 403);
+  assert.equal((await w.ana.call('vote', {topic: poster.id, value: 1}, M)).status, 200);
+  assert.equal((await w.guest.call('vote', {topic: poster.id, value: 1}, M)).status, 401);
 
-  // Close submissions: one voting email, hidden topics left out.
-  const budget = (await org.get(A)).body.topics.find(t => t.label === 'Budget');
-  await org.call('topic-hide', {topic: budget.id, hidden: true}, A);
-  mailer.outbox.length = 0;
-  r = await org.call('phase', {phase: 'vote'}, A);
-  assert.equal(r.body.notice, 'Sending to 2 people.');
-  assert.match(mailer.outbox[0].subject, /^Vote on the topics/);
-  assert.ok(!mailer.outbox.some(m => m.html.includes('Budget')), 'hidden topic not emailed');
-  assert.equal((await alice.call('topic', {label: 'late'}, M)).status, 409, 'submissions closed');
-  await org.call('phase', {phase: 'collect'}, A); mailer.outbox.length = 0;
-  await org.call('phase', {phase: 'vote'}, A);
-  assert.equal(mailer.outbox.length, 0, 'voting email only once');
+  // Digest: Ana's email has buttons only on Ben's topic, and her email vote replaces her site vote.
+  w.mailer.outbox.length = 0;
+  const rep = await daily(w.db, w.mailer, ORIGIN);
+  assert.equal(rep.digests, 1);
+  const anaMail = w.mailer.outbox.find(m => m.to === 'ana@example.org');
+  assert.match(anaMail.subject, /2 new topics/);
+  assert.equal((anaMail.html.match(/a=vote/g) || []).length, 2);
+  assert.match(anaMail.html, /Your topic/);
+  const voteUrl = link('vote', anaMail.html).replace('v=1', 'v=-1');
+  assert.match((await visit(w.db, voteUrl)).text, /Confirm your vote/);
+  await visit(w.db, voteUrl, 'POST');
+  assert.equal((await w.ana.get(M)).body.topics.find(t => t.id === poster.id).mine, -1, 'same person on site and email');
+  assert.equal((await w.pg.query("SELECT count(*)::int n FROM ballots")).rows[0].n, 1);
+  const forged = link('vote', anaMail.html).replace(/topic=[^&]+/, 'topic=' + budget.id);
+  assert.equal((await visit(w.db, forged, 'POST')).status, 403, 'no voting on your own topic from email either');
+  assert.equal((await daily(w.db, w.mailer, ORIGIN)).digests, 0, 'topics announced once');
+});
 
-  // Schedule and calendar.
-  mailer.outbox.length = 0;
-  r = await org.call('schedule', {local: '2026-12-03T19:00', timezone: 'America/New_York', duration: '90', location: 'Gallery', notify: true}, A);
-  assert.equal(r.body.notice, 'Sending to 2 people.');
-  assert.match(mailer.outbox[0].subject, /^Save the date/);
-  const g = await alice.get(M);
-  assert.equal(g.body.startsAt, '2026-12-04T00:00:00.000Z');
-  assert.match(g.body.when, /Thursday, December 3, 2026.*7:00.PM EST/);
-  assert.equal(zonedToUtc('2026-07-01T09:30', 'Europe/Berlin').toISOString(), '2026-07-01T07:30:00.000Z', 'daylight saving time');
-  assert.equal((await org.call('schedule', {local: '2026-12-03T19:00', timezone: 'Mars/Base'}, A)).status, 400);
+test('moderation: organizers edit, hide and delete topics; members cannot', async () => {
+  const w = await world();
+  const M = await newMeeting(w);
+  await w.ben.call('topic', {label: 'Spam spam'}, M);
+  await w.ben.call('topic', {label: 'Real topic'}, M);
+  const [spam, real] = (await w.org.get(M)).body.topics;
+  assert.equal((await w.ana.call('topic-hide', {topic: spam.id, hidden: true}, M)).status, 403);
+  await w.org.call('topic-hide', {topic: spam.id, hidden: true}, M);
+  assert.deepEqual((await w.ana.get(M)).body.topics.map(t => t.label), ['Real topic']);
+  assert.equal((await w.ana.call('vote', {topic: spam.id, value: 1}, M)).status, 409);
+  await w.org.call('topic-edit', {topic: real.id, label: 'Renamed', detail: 'More', kind: 'Update'}, M);
+  assert.equal((await w.ana.get(M)).body.topics[0].label, 'Renamed');
+  await w.org.call('topic-delete', {topic: spam.id}, M);
+  assert.equal((await w.org.get(M)).body.topics.length, 1);
+});
 
-  // Agenda: emailed on first publish only; email voting closes.
-  mailer.outbox.length = 0;
-  r = await org.call('agenda', {agenda: [{label: 'Poster', minutes: 20, kind: 'Decision'}]}, A);
-  assert.equal(r.body.notice, 'Sending to 2 people.');
-  assert.match(mailer.outbox[0].html, /api\/calendar\?meeting=/);
-  mailer.outbox.length = 0; await org.call('agenda', {agenda: [{label: 'Poster', minutes: 25}]}, A);
-  assert.equal(mailer.outbox.length, 0);
-  assert.equal((await visit(db, voteUrl, 'POST')).status, 409);
+test('meeting flow: final vote email, time change, agenda, reminder, outcomes, unsubscribe', async () => {
+  const w = await world();
+  const M = await newMeeting(w);
+  await w.ana.call('topic', {label: 'Poster'}, M);
+  w.mailer.outbox.length = 0;
+  assert.equal((await w.org.call('phase', {phase: 'vote'}, M)).body.notice, 'Sending to 3 people.');
+  assert.match(w.mailer.outbox[0].subject, /^Vote on the topics/);
+  assert.equal((await w.ana.call('topic', {label: 'late'}, M)).status, 409);
 
-  // Reminder about a day before, once.
-  const start = Date.parse('2026-12-04T00:00:00Z');
-  mailer.outbox.length = 0;
-  assert.equal((await daily(db, mailer, ORIGIN, start - 48 * 3600000)).reminders, 0);
-  assert.equal((await daily(db, mailer, ORIGIN, start - 20 * 3600000)).reminders, 1);
-  assert.match(mailer.outbox[0].subject, /^Reminder/);
-  assert.equal((await daily(db, mailer, ORIGIN, start - 10 * 3600000)).reminders, 0);
+  w.mailer.outbox.length = 0;
+  const start = later(12);
+  const r = await w.org.call('schedule', {title: 'Spring show', local: localNY(start), timezone: 'America/New_York', duration: '90', location: 'Gallery', notify: true}, M);
+  assert.equal(r.body.notice, 'Sending to 3 people.');
+  assert.match(w.mailer.outbox[0].subject, /^Time changed/);
+  assert.equal((await w.org.call('schedule', {local: '2026-12-03T19:00', timezone: 'Mars/Base'}, M)).status, 400);
 
-  // Outcomes, then one-click unsubscribe.
-  assert.equal((await org.call('email', {kind: 'outcomes'}, A)).status, 400);
-  await org.call('notes', {notes: 'Alice books the room'}, A);
-  mailer.outbox.length = 0;
-  await org.call('email', {kind: 'outcomes'}, A);
-  assert.equal(mailer.outbox.length, 2);
-  const unsub = link('unsub', mailer.outbox[0].html);
-  assert.match((await visit(db, unsub)).text, /Stop email updates/);
-  assert.match((await visit(db, unsub, 'POST')).text, /unsubscribed/);
-  mailer.outbox.length = 0;
-  await org.call('email', {kind: 'outcomes'}, A);
-  assert.equal(mailer.outbox.length, 1, 'unsubscribed person skipped');
+  w.mailer.outbox.length = 0;
+  assert.equal((await w.org.call('agenda', {agenda: [{label: 'Poster', minutes: 20, kind: 'Decision'}]}, M)).body.notice, 'Sending to 3 people.');
+  assert.match(w.mailer.outbox[0].html, /api\/calendar\?meeting=/);
+  assert.match(w.mailer.outbox[0].html, /a=rsvp/);
+  w.mailer.outbox.length = 0;
+  await w.org.call('agenda', {agenda: [{label: 'Poster', minutes: 25}]}, M);
+  assert.equal(w.mailer.outbox.length, 0, 'agenda emailed once');
 
-  const row = (await pg.query('SELECT * FROM meetings WHERE id=$1', [M.meeting])).rows[0];
+  const s = (await w.org.get(M)).body.startsAt;
+  w.mailer.outbox.length = 0;
+  assert.equal((await daily(w.db, w.mailer, ORIGIN, Date.parse(s) - 48 * 3600000)).reminders, 0);
+  assert.equal((await daily(w.db, w.mailer, ORIGIN, Date.parse(s) - 20 * 3600000)).reminders, 1);
+  assert.match(w.mailer.outbox[0].subject, /^Reminder/);
+  assert.equal((await daily(w.db, w.mailer, ORIGIN, Date.parse(s) - 10 * 3600000)).reminders, 0);
+
+  assert.equal((await w.org.call('email', {kind: 'outcomes'}, M)).status, 400);
+  await w.org.call('notes', {notes: 'Ana books the room'}, M);
+  w.mailer.outbox.length = 0;
+  await w.org.call('email', {kind: 'outcomes'}, M);
+  const anaMail = w.mailer.outbox.find(m => m.to === 'ana@example.org');
+  assert.ok(anaMail.headers['List-Unsubscribe-Post']);
+  const unsub = link('unsub', anaMail.html);
+  assert.match((await visit(w.db, unsub)).text, /Stop emails\?/);
+  await visit(w.db, unsub, 'POST');
+  w.mailer.outbox.length = 0;
+  await w.org.call('email', {kind: 'outcomes'}, M);
+  assert.ok(!w.mailer.outbox.some(m => m.to === 'ana@example.org'), 'unsubscribed member skipped');
+  assert.equal((await w.ana.group()).body.me.emails, 'none', 'but still a member');
+
+  const row = (await w.pg.query('SELECT * FROM meetings WHERE id=$1', [M.meeting])).rows[0];
   const ics = calendarFile(row, ORIGIN + '/#' + row.id);
-  assert.match(ics, /DTSTART:20261204T000000Z/);
-  assert.match(ics, /DTEND:20261204T013000Z/);
+  assert.match(ics, /LOCATION:Gallery/);
   assert.ok(ics.split('\r\n').every(l => l.length <= 75));
 });
 
-test('organizer access needs the exact secret', async () => {
-  const {db} = await setup();
-  const {M, A} = await newMeeting(db, null);
-  const someone = client(db, null, {cookie: BEN});
-  assert.equal((await someone.call('notes', {notes: 'x'}, {...M, secret: A.secret.slice(0, -1) + '0'})).status, 403);
-  assert.equal((await someone.call('notes', {notes: 'x'}, A)).status, 200);
+test('repeating meetings: the next one is created and announced after the meeting ends, once', async () => {
+  const w = await world();
+  const M = await newMeeting(w, {repeat: 'weekly'});
+  const s = Date.parse((await w.org.get(M)).body.startsAt);
+  w.mailer.outbox.length = 0;
+  assert.equal((await daily(w.db, w.mailer, ORIGIN, s + 3600000)).created, 0, 'not while it is still on');
+  const rep = await daily(w.db, w.mailer, ORIGIN, s + 3 * 3600000);
+  assert.equal(rep.created, 1);
+  const upcoming = (await w.ana.group()).body.meetings.upcoming;
+  assert.ok(upcoming.some(m => Date.parse(m.startsAt) === s + 7 * 86400000 || Math.abs(Date.parse(m.startsAt) - s - 7 * 86400000) === 3600000), 'a week later, same local time');
+  assert.ok(w.mailer.outbox.some(m => /^New meeting/.test(m.subject)));
+  assert.equal((await daily(w.db, w.mailer, ORIGIN, s + 4 * 3600000)).created, 0, 'only once');
+  assert.equal(nextOccurrence(new Date('2026-10-30T23:00:00Z'), 'America/New_York', 'weekly').toISOString(), '2026-11-07T00:00:00.000Z', 'keeps 7 pm across daylight saving');
+  assert.equal(nextOccurrence(new Date('2026-12-30T00:00:00Z'), 'America/New_York', 'monthly').toISOString(), '2027-01-27T00:00:00.000Z', 'a 5th Tuesday becomes the last Tuesday');
+  assert.equal(zonedToUtc('2026-07-01T09:30', 'Europe/Berlin').toISOString(), '2026-07-01T07:30:00.000Z');
 });
 
-test('without email settings the app still works and says so', async () => {
-  const {db} = await setup();
-  const {M} = await newMeeting(db, null);
-  const r = await client(db, null, {cookie: BEN}).call('subscribe', {email: 'z@example.org'}, M);
-  assert.equal(r.status, 409);
+test('outbox: failed sends are retried; over-budget mail waits instead of being dropped', async () => {
+  const w = await world();
+  w.mailer.failNext = 1;
+  await w.guest.group('signin', {email: 'ana@example.org'});
+  assert.equal(w.mailer.outbox.length, 0, 'first attempt failed');
+  assert.deepEqual(await flush(w.db, w.mailer), {sent: 1, failed: 0});
+  process.env.EMAIL_DAILY_LIMIT = '1';
+  try {
+    await w.guest.group('signin', {email: 'ben@example.org'});
+    assert.equal(w.mailer.outbox.length, 1, 'budget used up: waits');
+    assert.equal((await w.pg.query("SELECT count(*)::int n FROM outbox WHERE status='queued'")).rows[0].n, 1);
+  } finally { delete process.env.EMAIL_DAILY_LIMIT; }
+});
+
+test('rate limits on sign-in requests', async () => {
+  const w = await world();
+  for (let i = 0; i < 5; i++) assert.equal((await w.guest.group('signin', {email: 'ana@example.org'})).status, 200);
+  assert.equal((await w.guest.group('signin', {email: 'ana@example.org'})).status, 429);
+});
+
+test('old organizer links keep working for their own meeting', async () => {
+  const w = await world();
+  const M = await newMeeting(w);
+  const {secret} = (await w.pg.query('SELECT secret FROM meetings WHERE id=$1', [M.meeting])).rows[0];
+  assert.equal((await w.guest.call('notes', {notes: 'x'}, {...M, secret: secret.slice(0, -1) + '0'})).status, 403);
+  assert.equal((await w.guest.call('notes', {notes: 'x'}, {...M, secret})).status, 200);
 });
