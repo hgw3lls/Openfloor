@@ -11,6 +11,7 @@
     "migrate": "node scripts/migrate.mjs"
   },
   "dependencies": {
-    "@neondatabase/serverless": "1.0.2"
+    "@neondatabase/serverless": "1.0.2",
+    "nodemailer": "10.3.1"
   }
 }
