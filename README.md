@@ -30,15 +30,18 @@ People can join a meeting's email list from the participant page ("Get updates b
 
 Every email has an unsubscribe link and the one-click unsubscribe header that Gmail and Yahoo require.
 
-### Setup
+### Setup with Gmail (no domain needed)
 
-1. Create a [Resend](https://resend.com) account. Under **Domains**, add the domain you'll send from, and add the DNS records it shows at your domain host.
-2. Create an API key in Resend.
+1. On the Google account you'll send from, turn on [2-Step Verification](https://myaccount.google.com/signinoptions/twosv).
+2. Create an [app password](https://myaccount.google.com/apppasswords) named "Open Floor" and copy the 16-character password.
 3. In Vercel, set these environment variables for Production, then redeploy:
-   - `RESEND_API_KEY`: the Resend API key.
-   - `EMAIL_FROM`: for example `Open Floor <meetings@your-domain.org>`, on the domain you verified.
+   - `SMTP_USER`: the Gmail address.
+   - `SMTP_PASS`: the app password (spaces are fine).
    - `CRON_SECRET`: a long random value. Vercel uses it to call the daily email job.
    - `APP_URL`: the public address, for example `https://tower-press-org.vercel.app`, used for links in the daily emails.
+   - `EMAIL_FROM` (optional): defaults to `Open Floor <your Gmail address>`.
    - `EMAIL_REPLY_TO` (optional): where replies to the emails go.
+
+Gmail allows about 500 emails a day, which is plenty for a group. To send from your own domain instead, set `RESEND_API_KEY` and `EMAIL_FROM` (an address on a domain verified in [Resend](https://resend.com)) and leave `SMTP_USER`/`SMTP_PASS` unset. Any other SMTP server also works with `SMTP_HOST` and `SMTP_PORT`.
 
 The daily job runs at 16:00 UTC (see `vercel.json`).
