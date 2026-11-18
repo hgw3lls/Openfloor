@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Open Floor</title>
+<style>
+:root{color-scheme:light;--paper:#f3f1e9;--ink:#211e24;--purple:#4d32ad;--line:#c9c4b9;--lime:#def38e}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.55 system-ui,sans-serif}
+header{border-bottom:1px solid var(--line)}header div,main{max-width:850px;margin:auto;padding:0 24px}header div{display:flex;align-items:center;justify-content:space-between;height:65px}header a{font-weight:800;color:inherit;text-decoration:none;letter-spacing:-.04em;font-size:1.3rem}header a:before{content:"";display:inline-block;width:14px;height:14px;background:var(--purple);margin-right:9px;transform:rotate(-12deg)}header span,.mono{font:700 .73rem ui-monospace,monospace;letter-spacing:.08em;text-transform:uppercase}
+main{padding-bottom:64px}h1,h2{font-family:Georgia,serif;line-height:1.02;font-weight:normal;margin:0 0 18px}h1{font-size:clamp(3rem,10vw,7.2rem);letter-spacing:-.075em;overflow-wrap:anywhere}h2{font-size:2.2rem;letter-spacing:-.04em}p{margin:0 0 16px}.hero{padding:55px 0 32px;border-bottom:2px solid var(--ink);margin-bottom:24px}.hero p:last-child{margin:0}.phase{display:inline-block;padding:5px 9px;background:var(--lime);margin-bottom:12px}.panel{border:1px solid var(--line);background:#faf9f3;padding:22px;margin:16px 0}.admin{border:1px solid var(--purple)}.muted{color:#5a535f}label{display:block;font-weight:650;margin:0 0 12px}input:not([type=checkbox]),textarea,select{display:block;width:100%;border:1px solid #8b8491;background:white;color:var(--ink);padding:9px 11px;font:inherit;margin-top:4px;border-radius:0}textarea{min-height:88px;resize:vertical}button{font:700 .9rem system-ui;border:1px solid var(--purple);background:var(--purple);color:white;padding:10px 14px;min-height:43px;cursor:pointer}button.alt{color:var(--purple);background:transparent}button:disabled{opacity:.55;cursor:wait}button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid #7657d6;outline-offset:3px}.actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.topic{padding:13px 0;border-bottom:1px solid var(--line);overflow-wrap:anywhere}.topic:last-of-type{margin-bottom:12px}.topic p{white-space:pre-wrap;margin:5px 0}.tag{color:var(--purple);margin-right:9px}.draft{border-top:1px solid var(--line);padding:16px 0 4px}.draft label input[type=number]{width:100px}.note{white-space:pre-wrap;overflow-wrap:anywhere}.status{color:#7b2055;min-height:1.5em;margin-top:14px}.status:empty{min-height:0}.steps{margin:0;color:var(--purple)}@media(max-width:460px){header span{display:none}.panel{padding:16px}.hero{padding-top:38px}}
+</style>
+<header><div><a href="/">Open Floor</a><span>Meeting board for artists</span></div></header>
+<main><div id="app">Loading…</div><p id="status" class="status" role="status"></p></main>
+<script>
+const root=document.querySelector('#app'), status=document.querySelector('#status');
+const [id='',secret]=location.hash.slice(1).split('/');
+const categories=['Discussion','Decision','Update'];
+const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let meeting, draft=[];
+const options=selected=>categories.map(kind=>'<option'+(selected===kind?' selected':'')+'>'+kind+'</option>').join('');
+const invite=()=>location.origin+'/#'+id;
+const tell=message=>status.textContent=message;
+async function api(action='',payload){
+  const headers={};
+  if(secret)headers.Authorization='Bearer '+secret;
+  if(payload!==undefined)headers['Content-Type']='application/json';
+  const query=new URLSearchParams({meeting:id,action});
+  const response=await fetch('/api/meeting?'+query,{method:payload===undefined?'GET':'POST',headers,body:payload===undefined?undefined:JSON.stringify(payload)});
+  const data=await response.json();
+  if(!response.ok)throw Error(data.error);
+  return data;
+}
+const hero=(title,subtitle,badge='')=>'<section class="hero">'+(badge?'<span class="mono phase">'+badge+'</span>':'')+'<h1>'+esc(title)+'</h1>'+(subtitle?'<p>'+esc(subtitle)+'</p>':'')+'</section>';
+function home(){
+  root.innerHTML=hero('Open Floor','Make an agenda together before you meet.')+
+  '<form class="panel" data-form="create"><h2>Create a meeting</h2><label>Meeting name<input name="title" required maxlength="100" placeholder="Artist group meeting"></label><label>Date and time <small>(optional)</small><input name="schedule" maxlength="120" placeholder="Thursday, 7 pm · gallery"></label><label>Organizer access key<input type="password" name="organizerKey" maxlength="256" required autocomplete="off"></label><button>Create meeting</button></form>';
+}
+function topic(item,voting){
+  return '<div class="topic">'+(voting?'<label><input type="checkbox" name="picks" value="'+item.id+'" '+(meeting.picks.includes(item.id)?'checked':'')+'> '+esc(item.label)+'</label>':'<strong>'+esc(item.label)+'</strong>')+
+    '<div class="mono"><span class="tag">'+esc(item.kind)+'</span>'+((meeting.admin||meeting.phase==='agenda')?item.votes+' votes':'')+'</div>'+(item.detail?'<p>'+esc(item.detail)+'</p>':'')+'</div>';
+}
+function organizer(){
+  return '<section class="panel admin"><h2>Organizer</h2><p class="muted">Bookmark this organizer page. Share the participant link so people can open the meeting without your editing controls.</p><label>Participant link<input readonly id="invite" value="'+esc(invite())+'"></label><div class="actions"><button data-action="copy" class="alt">Copy participant link</button>'+
+    (meeting.phase!=='collect'?'<button data-action="collect" class="alt">Reopen submissions</button>':'')+
+    (meeting.phase!=='vote'&&meeting.topics.length?'<button data-action="vote" class="alt">Open voting</button>':'')+'</div>'+
+    '<form data-form="agenda"><h2>Build the agenda</h2><p class="muted">Edit the suggested order, make room for urgent items, and publish when ready. Publishing closes submissions and voting.</p><div class="actions"><button type="button" data-action="suggest" class="alt" '+(meeting.topics.length?'':'disabled')+'>Use top three topics</button><button type="button" data-action="add" class="alt">Add agenda item</button></div><div id="draft"></div><button '+(draft.length?'':'disabled')+'>Publish agenda</button></form>'+
+    (meeting.agenda.length?'<form data-form="notes" class="draft"><h2>Meeting outcomes</h2><label>Decisions and next steps<textarea name="notes" maxlength="7000" placeholder="Action · who will do it · by when">'+esc(meeting.notes)+'</textarea></label><button>Save outcomes</button></form>':'')+'</section>';
+}
+function drawDraft(){
+  const container=document.querySelector('#draft');
+  if(!container)return;
+  container.innerHTML=draft.map((item,i)=>'<div class="draft" data-row><label>Topic<input name="label" required maxlength="120" value="'+esc(item.label)+'"></label><label>What needs to happen?<textarea name="detail" maxlength="650">'+esc(item.detail)+'</textarea></label><label>Type<select name="kind">'+options(item.kind)+'</select></label><label>Minutes<input name="minutes" type="number" min="1" max="120" required value="'+item.minutes+'"></label><div class="actions">'+(i?'<button type="button" class="alt" data-action="up" data-index="'+i+'">Move up</button>':'')+'<button type="button" class="alt" data-action="remove" data-index="'+i+'">Remove</button></div></div>').join('');
+  container.nextElementSibling.disabled=!draft.length;
+}
+function readDraft(){
+  draft=[...document.querySelectorAll('[data-row]')].map(row=>Object.fromEntries([...row.querySelectorAll('[name]')].map(field=>[field.name,field.value])));
+}
+function render(){
+  const voting=meeting.phase==='vote';
+  root.innerHTML=hero(meeting.title,meeting.schedule,{collect:'Topic submissions',vote:'Voting open',agenda:'Agenda published'}[meeting.phase])+
+    (meeting.phase==='agenda'?'<section class="panel"><h2>Agenda</h2><p class="mono">'+meeting.agenda.reduce((total,item)=>total+item.minutes,0)+' minutes</p>'+meeting.agenda.map(item=>'<div class="topic"><div class="mono"><span class="tag">'+esc(item.kind)+'</span>'+item.minutes+' min</div><strong>'+esc(item.label)+'</strong>'+(item.detail?'<p>'+esc(item.detail)+'</p>':'')+'</div>').join('')+'</section>':'')+
+    (meeting.notes?'<section class="panel"><h2>Decisions and next steps</h2><div class="note">'+esc(meeting.notes)+'</div></section>':'')+
+    (meeting.phase==='collect'?'<form class="panel" data-form="topic"><h2>Suggest a topic</h2><p class="muted">What should we make time for? Your topic will be visible to everyone with the meeting link.</p><label>Topic<input name="label" maxlength="120" required></label><label>What would you like to happen? <small>(optional)</small><textarea name="detail" maxlength="650"></textarea></label><label>Type<select name="kind">'+options('Discussion')+'</select></label><button>Submit topic</button></form>':'')+
+    (meeting.phase!=='agenda'?'<form class="panel" data-form="ballot"><h2>Submitted topics</h2>'+(voting?'<p class="muted">Choose up to two topics. You can change your choices until voting closes.</p>':'')+(meeting.topics.length?meeting.topics.map(item=>topic(item,voting)).join(''):'<p class="muted">No topics yet.</p>')+(voting?'<button>Save votes</button>':'')+'</form>':'')+
+    (meeting.admin?organizer():'');
+  drawDraft();
+}
+async function load(){
+  if(!id){home();return;}
+  meeting=await api();
+  draft=meeting.agenda.map(item=>({...item}));
+  render();
+}
+async function perform(button,task){
+  if(button)button.disabled=true;
+  tell('');
+  try{await task();}catch(error){tell(error.message);}
+  finally{if(button?.isConnected)button.disabled=false;}
+}
+root.addEventListener('submit',event=>{
+  event.preventDefault();
+  const form=event.target, data=new FormData(form);
+  perform(event.submitter,async()=>{
+    switch(form.dataset.form){
+      case 'create': {
+        const created=await api('',Object.fromEntries(data));
+        location.hash=created.id+'/'+created.secret;
+        return;
+      }
+      case 'topic': await api('topic',Object.fromEntries(data)); break;
+      case 'ballot': await api('vote',{picks:data.getAll('picks')}); break;
+      case 'agenda': readDraft(); await api('agenda',{agenda:draft}); break;
+      case 'notes': await api('notes',{notes:data.get('notes')}); break;
+    }
+    const action=form.dataset.form;
+    if(action!=='agenda' && meeting.admin)readDraft();
+    meeting=await api();
+    if(action==='agenda')draft=meeting.agenda.map(item=>({...item}));
+    render();
+    tell({topic:'Topic submitted.',ballot:'Votes saved.',agenda:'Agenda published.',notes:'Outcomes saved.'}[action]);
+  });
+});
+root.addEventListener('change',event=>{
+  if(event.target.name==='picks'){
+    const list=root.querySelectorAll('[name=picks]:checked');
+    if(list.length>2){event.target.checked=false;tell('Choose up to two topics.');}
+    else tell('');
+  }
+});
+root.addEventListener('click',event=>{
+  const button=event.target.closest('[data-action]');
+  if(!button)return;
+  const action=button.dataset.action;
+  perform(button,async()=>{
+    if(action==='copy'){
+      const field=document.querySelector('#invite');
+      field.select();
+      if(navigator.clipboard){try{await navigator.clipboard.writeText(field.value);tell('Participant link copied.');return;}catch{}}
+      tell('Participant link selected. Copy it from the field.');
+      return;
+    }
+    readDraft();
+    if(action==='collect'||action==='vote'){
+      await api('phase',{phase:action});
+      meeting=await api();
+      render();
+      tell(action==='vote'?'Voting is open.':'Submissions are open.');
+      return;
+    }
+    const i=Number(button.dataset.index);
+    if(action==='suggest'){
+      if(draft.length&&!confirm('Replace the current draft with the three highest-ranked topics?'))return;
+      draft=meeting.topics.slice(0,3).map(item=>({...item,minutes:15}));
+    }
+    if(action==='add'&&draft.length<15)draft.push({label:'',detail:'',kind:'Discussion',minutes:10});
+    if(action==='remove')draft.splice(i,1);
+    if(action==='up')[draft[i-1],draft[i]]=[draft[i],draft[i-1]];
+    drawDraft();
+  });
+});
+window.addEventListener('hashchange',()=>location.reload());
+load().catch(error=>{root.innerHTML=hero('Meeting unavailable','Check the meeting link or return to Open Floor.');tell(error.message);});
+</script>
+</html>
