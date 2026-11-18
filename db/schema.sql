@@ -12,3 +12,10 @@ CREATE TABLE IF NOT EXISTS ballots (topic TEXT NOT NULL REFERENCES topics(id), m
 INSERT INTO ballots (topic,meeting,voter,value) SELECT v.pick1,v.meeting,'c:'||v.voter,1 FROM votes v JOIN topics t ON t.id=v.pick1 ON CONFLICT DO NOTHING;
 INSERT INTO ballots (topic,meeting,voter,value) SELECT v.pick2,v.meeting,'c:'||v.voter,1 FROM votes v JOIN topics t ON t.id=v.pick2 ON CONFLICT DO NOTHING;
 DELETE FROM votes;
+ALTER TABLE topics ADD COLUMN IF NOT EXISTS author TEXT NOT NULL DEFAULT '';
+ALTER TABLE topics ADD COLUMN IF NOT EXISTS hidden BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE subscribers ADD COLUMN IF NOT EXISTS voter TEXT NOT NULL DEFAULT '';
+CREATE TABLE IF NOT EXISTS outbox (id TEXT PRIMARY KEY, meeting TEXT NOT NULL, recipient TEXT NOT NULL, message TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'queued', attempts INTEGER NOT NULL DEFAULT 0, created BIGINT NOT NULL, updated BIGINT NOT NULL, error TEXT NOT NULL DEFAULT '');
+CREATE INDEX IF NOT EXISTS outbox_status ON outbox (status, created);
+CREATE TABLE IF NOT EXISTS rate_events (key TEXT NOT NULL, at BIGINT NOT NULL);
+CREATE INDEX IF NOT EXISTS rate_events_key ON rate_events (key, at)
