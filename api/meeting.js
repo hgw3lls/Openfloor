@@ -23,7 +23,8 @@ function postgres(connectionString) {
 
 export default {
   async fetch(request) {
-    const {DATABASE_URL, ORGANIZER_KEY} = process.env;
+    const {ORGANIZER_KEY} = process.env;
+    const DATABASE_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL;
     if (!DATABASE_URL || !ORGANIZER_KEY?.trim()) {
       return Response.json({error:'The meeting board has not been configured yet.'}, {status:503});
     }

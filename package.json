@@ -3,6 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "engines": {"node": "22.x"},
-  "dependencies": {"@neondatabase/serverless": "1.0.2"}
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "build": "node scripts/migrate.mjs",
+    "migrate": "node scripts/migrate.mjs"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "1.0.2"
+  }
 }
