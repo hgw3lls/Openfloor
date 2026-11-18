@@ -28,6 +28,13 @@ async function call(path,params,payload){
 }
 const api=(action='',payload)=>call('/api/meeting',{meeting:id,action},payload);
 const groupApi=(action='',payload)=>call('/api/group',{action},payload);
+const dueText=d=>d?new Date(d+'T12:00:00Z').toLocaleDateString(undefined,{timeZone:'UTC',weekday:'short',month:'short',day:'numeric'}):'';
+const overdue=a=>a.status==='open'&&a.due&&a.due<new Date().toISOString().slice(0,10);
+function actionRow(a,{showMeeting=false,canDone=false,canDelete=false}={}){
+  return '<li class="action'+(a.status==='done'?' done':'')+'"><span><strong>'+esc(a.title)+'</strong> <span class="muted">'+[a.ownerName||'No owner yet',a.due?(overdue(a)?'<span class="late">overdue, was due '+esc(dueText(a.due))+'</span>':'due '+esc(dueText(a.due))):'',showMeeting?'<a href="#'+a.meeting+'">'+esc(a.meetingTitle)+'</a>':''].filter(Boolean).join(' · ')+'</span></span><span class="actions">'+
+    (canDone?'<button type="button" class="'+(a.status==='done'?'alt ':'')+'small" data-action="action-done" data-item="'+a.id+'" data-meeting="'+a.meeting+'" data-done="'+(a.status!=='done')+'">'+(a.status==='done'?'Reopen':'Done')+'</button>':'')+
+    (canDelete?'<button type="button" class="alt small" data-action="action-delete" data-item="'+a.id+'">Delete</button>':'')+'</span></li>';
+}
 const postsApi=(action='',payload,params={})=>call('/api/posts',{action,...params},payload);
 const ago=ms=>{const m=Math.round((Date.now()-ms)/60000);return m<1?'just now':m<60?m+' min ago':m<1440?Math.round(m/60)+' h ago':new Date(ms).toLocaleDateString(undefined,{month:'short',day:'numeric'});};
 const para=text=>esc(text).replace(/\n/g,'<br>');
@@ -61,15 +68,36 @@ function meetingCard(m){
 function dashboard(){
   const me=group.me, org=me.role==='organizer', requests=(group.members||[]).filter(m=>m.status==='requested').length;
   root.innerHTML=hero(group.group,'Hi'+(me.name?', '+me.name:'')+'.')+
-    '<section class="panel"><h2>Upcoming meetings</h2>'+(group.meetings.upcoming.length?group.meetings.upcoming.map(meetingCard).join(''):'<p class="muted">No meetings scheduled yet.</p>')+'</section>'+
+    (group.myActions?.length?'<section class="panel"><h2>Your action items</h2><ul class="subs">'+group.myActions.map(a=>actionRow(a,{showMeeting:true,canDone:true})).join('')+'</ul></section>':'')+
+    '<section class="panel"><h2>Upcoming meetings</h2>'+(group.meetings.upcoming.length?group.meetings.upcoming.map(meetingCard).join(''):'<p class="muted">No meetings scheduled yet.</p>')+'<p><a href="#decisions">Decisions and past meetings →</a></p></section>'+
     (org?'<section class="panel admin"><h2>Organizer</h2><div class="actions"><a class="button alt" href="#members">Members'+(requests?' · '+requests+' waiting':'')+'</a></div>'+
       '<form data-form="new-meeting" class="draft"><h2>New meeting</h2><p class="muted">Everyone on the member list gets an email with RSVP buttons.</p><label>Name<input name="title" required maxlength="100" placeholder="Monthly members meeting"></label>'+timeFields({timezone:zone(),duration:90})+'<button>Create and invite members</button></form></section>':'')+
     '<section class="panel"><h2>Posts</h2><p class="muted">Announcements, questions and news for the group. Everyone gets them by email and can reply from their inbox.</p>'+
       (postList.length?postList.map(p=>'<a class="card" href="#post/'+p.id+'"><strong>'+(p.pinned?'📌 ':'')+esc(p.title)+'</strong><span class="muted">'+esc(p.author)+' · '+ago(p.created)+(p.replies?' · '+p.replies+(p.replies===1?' reply':' replies'):'')+(p.hidden?' · hidden':'')+'</span>'+(p.excerpt?'<span>'+esc(p.excerpt)+(p.excerpt.length>=240?'…':'')+'</span>':'')+'</a>').join(''):'<p class="muted">No posts yet.</p>')+
       '<details class="draft"><summary>Write a post</summary><form data-form="post"><label>Title<input name="title" required maxlength="140"></label><label>Message<textarea name="body" maxlength="6000" rows="6"></textarea></label><button>Post to the group</button></form></details></section>'+
     (group.meetings.past.length?'<section class="panel"><h2>Past meetings</h2>'+group.meetings.past.map(meetingCard).join('')+'</section>':'')+
-    settingsForm(me);
+    calendarPanel()+settingsForm(me);
 }
+function calendarPanel(){
+  const url=group.feedUrl;
+  if(!url)return '<section class="panel"><h2>Your calendar</h2><p class="muted">Get every meeting, and your action items’ due dates, in Google, Apple or Outlook calendar. It updates on its own.</p><button type="button" data-action="feed">Get my calendar link</button></section>';
+  const webcal=url.replace(/^https?:/,'webcal:');
+  return '<section class="panel"><h2>Your calendar</h2><p class="muted">Add this link to your calendar once; new meetings appear on their own. Keep it private: it’s yours.</p><label>Calendar link<input readonly id="feed" value="'+esc(url)+'"></label><div class="actions"><a class="button alt" href="https://calendar.google.com/calendar/r?cid='+encodeURIComponent(webcal)+'" target="_blank" rel="noopener">Add to Google Calendar</a><a class="button alt" href="'+esc(webcal)+'">Add to Apple or Outlook</a><button type="button" class="alt" data-action="copy-feed">Copy link</button><button type="button" class="alt" data-action="feed">Make a new link</button></div></section>';
+}
+function decisionsPage(list){
+  const q=(document.querySelector('#search')?.value||'').trim().toLowerCase();
+  const match=m=>!q||JSON.stringify([m.title,m.notes,m.agenda.map(a=>a.label+' '+a.detail),m.actions.map(a=>a.title+' '+a.ownerName)]).toLowerCase().includes(q);
+  const shown=list.filter(match);
+  const html=shown.map(m=>'<section class="panel"><p class="mono">'+esc(m.startsAt?new Date(m.startsAt).toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric',timeZone:m.timezone}):m.schedule||'')+'</p><h2><a href="#'+m.id+'">'+esc(m.title)+'</a></h2>'+
+    (m.agenda.length?'<h3>Agenda</h3><ol>'+m.agenda.map(a=>'<li>'+esc(a.label)+'</li>').join('')+'</ol>':'')+
+    (m.notes?'<h3>Decisions and next steps</h3><div class="note">'+esc(m.notes)+'</div>':'')+
+    (m.actions.length?'<h3>Action items</h3><ul class="subs">'+m.actions.map(a=>actionRow(a)).join('')+'</ul>':'')+'</section>').join('');
+  const results=document.querySelector('#results');
+  if(results){results.innerHTML=html||'<p class="muted">Nothing matches.</p>';return;}
+  root.innerHTML=hero('Decisions','Past meetings: agendas, decisions and action items.','','<p><a href="/">← Back</a></p>')+
+    '<label class="panel">Search<input id="search" type="search" placeholder="Search decisions, topics, people…"></label><div id="results">'+(html||'<p class="muted">No past meetings yet.</p>')+'</div>';
+}
+let decisionsData=[];
 function settingsForm(me){
   const value=me.emails==='none'?'none':me.digest;
   const opt=(v,l,d)=>'<label class="pick"><input type="radio" name="email" value="'+v+'"'+(value===v?' checked':'')+'> <span><strong>'+l+'</strong><br><span class="muted">'+d+'</span></span></label>';
@@ -110,7 +138,7 @@ function members(){
 function topic(item,open){
   if(editing===item.id)return '<form class="topic" data-form="topic-edit" data-topic="'+item.id+'"><label>Topic<input name="label" maxlength="120" required value="'+esc(item.label)+'"></label><label>Details<textarea name="detail" maxlength="650">'+esc(item.detail)+'</textarea></label><label>Type<select name="kind">'+options(item.kind)+'</select></label><div class="actions"><button>Save topic</button><button type="button" class="alt" data-action="cancel-edit">Cancel</button></div></form>';
   const counts=item.up!==null?'<span>👍 '+item.up+' · 👎 '+item.down+'</span>':'';
-  const tags=(item.own?'<span class="tag">Your topic</span>':'')+(item.hidden?'<span class="tag">Hidden from members</span>':'');
+  const tags=(item.own?'<span class="tag">Your topic</span>':'')+(item.carried?'<span class="tag">Carried over</span>':'')+(item.hidden?'<span class="tag">Hidden from members</span>':'');
   const votes=open&&meeting.me&&!item.own&&!item.hidden?'<div class="votes"><button type="button" data-action="cast" data-topic="'+item.id+'" data-value="1" aria-pressed="'+(item.mine>0)+'" aria-label="Vote up: '+esc(item.label)+'">👍 Up</button><button type="button" data-action="cast" data-topic="'+item.id+'" data-value="-1" aria-pressed="'+(item.mine<0)+'" aria-label="Vote down: '+esc(item.label)+'">👎 Down</button></div>':'';
   const tools=meeting.admin?'<div class="actions"><button type="button" class="alt small" data-action="edit-topic" data-topic="'+item.id+'">Edit</button><button type="button" class="alt small" data-action="hide-topic" data-topic="'+item.id+'" data-hidden="'+!item.hidden+'">'+(item.hidden?'Show':'Hide')+'</button><button type="button" class="alt small" data-action="delete-topic" data-topic="'+item.id+'">Delete</button></div>':'';
   const talk=item.comments?.length?'<details class="talk"><summary>'+item.comments.length+(item.comments.length===1?' comment':' comments')+'</summary>'+comments(item.comments,{form:false,small:true})+'</details>':'';
@@ -125,6 +153,12 @@ function rsvpPanel(){
   return '<form class="panel" data-form="rsvp"><h2>Can you make it?</h2>'+(mine?'<p class="mono"><span class="chip rsvp-'+mine.status+'">You: '+rsvpLabels[mine.status]+'</span></p>':'')+
     (meeting.past?'<p class="muted">This meeting has happened.</p>':'<fieldset class="choices">'+choice('yes')+choice('maybe')+choice('no')+'</fieldset><label data-reason'+(mine?.status==='no'||mine?.status==='maybe'?'':' hidden')+'>Reason <small>(needed if you can’t make it; only organizers see it)</small><textarea name="reason" maxlength="500">'+esc(mine?.reason)+'</textarea></label><button>Save RSVP</button>')+
     coming+'</form>';
+}
+function actionsPanel(){
+  const list=meeting.actions||[];
+  if(!list.length&&!meeting.admin)return '';
+  const add=meeting.admin?'<form data-form="action-add" class="draft"><h3>Add an action item</h3><label>What needs to happen?<input name="title" required maxlength="200" placeholder="Book the gallery for March"></label><div class="row"><label>Who<select name="owner"><option value="">Nobody yet</option>'+(meeting.memberOptions||[]).map(m=>'<option value="'+m.id+'">'+esc(m.name)+'</option>').join('')+'</select></label><label>Due<input type="date" name="due"></label></div><button>Add action item</button><p class="muted">The owner gets an email, and reminders before it’s due.</p></form>':'';
+  return '<section class="panel"><h2>Action items</h2>'+(list.length?'<ul class="subs">'+list.map(a=>actionRow(a,{canDone:a.mine||meeting.admin,canDelete:meeting.admin})).join('')+'</ul>':'<p class="muted">None yet.</p>')+add+'</section>';
 }
 function joinPrompt(){
   return '<form class="panel" data-form="signin"><h2>Take part</h2><p class="muted">Sign in to RSVP, suggest topics and vote. Members get a sign-in link by email.</p><label>Email<input type="email" name="email" required maxlength="254" autocomplete="email"></label><button>Email me a sign-in link</button><p class="muted"><a href="/">Not a member? Ask to join.</a></p></form>';
@@ -142,8 +176,9 @@ function organizer(){
     attendance()+
     '<form data-form="schedule" class="draft"><h2>Meeting details</h2><label>Name<input name="title" maxlength="100" required value="'+esc(meeting.title)+'"></label>'+timeFields(meeting)+
     '<label class="check"><input type="checkbox" name="notify" checked> Email members if the time changes</label><button>Save details</button></form>'+
-    '<form data-form="agenda" class="draft"><h2>Build the agenda</h2><p class="muted">Edit the suggested order, make room for urgent items, and publish when ready. Publishing closes submissions and voting and emails the agenda to members.</p><div class="actions"><button type="button" data-action="suggest" class="alt" '+(meeting.topics.length?'':'disabled')+'>Use top three topics</button><button type="button" data-action="add" class="alt">Add agenda item</button></div><div id="draft"></div><button '+(draft.length?'':'disabled')+'>Publish agenda</button></form>'+
-    (meeting.agenda.length?'<form data-form="notes" class="draft"><h2>Meeting outcomes</h2><label>Decisions and next steps<textarea name="notes" maxlength="7000" placeholder="Action · who will do it · by when">'+esc(meeting.notes)+'</textarea></label><div class="actions"><button>Save outcomes</button>'+(meeting.notes?'<button type="button" class="alt" data-action="mail-outcomes">Email outcomes</button>':'')+'<button type="button" class="alt" data-action="mail-agenda">Email agenda again</button></div></form>':'')+'</section>';
+    '<form data-form="agenda" class="draft"><h2>Build the agenda</h2><p class="muted">Edit the suggested order, make room for urgent items, and publish when ready. Publishing closes submissions and voting and emails the agenda to members.</p><div class="actions"><button type="button" data-action="suggest" class="alt" '+(meeting.topics.length?'':'disabled')+'>Use top three topics</button><button type="button" data-action="add" class="alt">Add agenda item</button>'+(meeting.openActions?.length?'<button type="button" data-action="add-actions" class="alt">Add open action items ('+meeting.openActions.length+')</button>':'')+'</div><div id="draft"></div><button '+(draft.length?'':'disabled')+'>Publish agenda</button></form>'+
+    (meeting.phase==='agenda'&&meeting.otherMeetings?.length?'<form data-form="carry" class="draft"><h2>Carry topics over</h2><p class="muted">Move topics that didn’t make this agenda to another meeting. Repeating meetings do this on their own.</p><label>To<select name="to">'+meeting.otherMeetings.map(m=>'<option value="'+m.id+'">'+esc(m.title)+(m.when?' · '+esc(m.when):'')+'</option>').join('')+'</select></label><button>Move unused topics</button></form>':'')+
+    (meeting.agenda.length?'<form data-form="notes" class="draft"><h2>Meeting outcomes</h2><label>Decisions and next steps<textarea name="notes" maxlength="7000" placeholder="Action · who will do it · by when">'+esc(meeting.notes)+'</textarea></label><div class="actions"><button>Save outcomes</button>'+((meeting.notes||meeting.actions?.length)?'<button type="button" class="alt" data-action="mail-outcomes">Email outcomes and action items</button>':'')+'<button type="button" class="alt" data-action="mail-agenda">Email agenda again</button></div></form>':'')+'</section>';
 }
 function drawDraft(){
   const container=document.querySelector('#draft');
@@ -165,6 +200,7 @@ function render(){
     (meeting.notes?'<section class="panel"><h2>Decisions and next steps</h2><div class="note">'+esc(meeting.notes)+'</div></section>':'')+
     (canSuggest?'<form class="panel" data-form="topic"><h2>Suggest a topic</h2><p class="muted">What should we make time for? Members see your topic and vote on it; you can’t vote on your own.</p><label>Topic<input name="label" maxlength="120" required></label><label>What would you like to happen? <small>(optional)</small><textarea name="detail" maxlength="650"></textarea></label><label>Type<select name="kind">'+options('Discussion')+'</select></label>'+trap+'<button>Submit topic</button></form>':'')+
     (open?'<section class="panel"><h2>Submitted topics</h2>'+(meeting.topics.length?(meeting.me?'<p class="muted">Vote 👍 or 👎 on any topic. Tap again to take your vote back.</p>':'')+meeting.topics.map(item=>topic(item,true)).join(''):'<p class="muted">No topics yet.</p>')+'</section>':'')+
+    actionsPanel()+
     (meeting.me?'<section class="panel"><h2>Discussion</h2><p class="muted">Questions and notes about this meeting. You can also reply to any meeting email.</p>'+comments(meeting.discussion||[],{kind:'meeting',target:id})+'</section>':joinPrompt())+
     (meeting.admin?organizer():'');
   drawDraft();
@@ -186,6 +222,7 @@ async function load(){
     draft=meeting.agenda.map(item=>({...item}));
     render();
   }else if(route==='members'&&group.me?.role==='organizer'){members();}
+  else if(route==='decisions'&&group.me){decisionsData=(await call('/api/group',{view:'decisions'})).decisions;decisionsPage(decisionsData);}
   else if(postId&&group.me){post=(await postsApi('',undefined,{post:postId})).post;document.title=post.title+' · '+group.group;postPage();}
   else if(group.me){postList=(await postsApi()).posts;dashboard();}
   else welcome();
@@ -199,6 +236,7 @@ async function perform(button,task){
   finally{if(button?.isConnected)button.disabled=false;}
 }
 
+root.addEventListener('input',event=>{if(event.target.id==='search')decisionsPage(decisionsData);});
 root.addEventListener('change',event=>{
   if(event.target.name==='status'&&event.target.closest('[data-form=rsvp]')){
     const reason=root.querySelector('[data-reason]');
@@ -228,6 +266,8 @@ root.addEventListener('submit',event=>{
         return;
       }
       case 'rsvp': result=await api('rsvp',{status:fields.status,reason:fields.reason}); break;
+      case 'action-add': result=await api('action-add',fields); break;
+      case 'carry': result=await api('carry',{to:fields.to}); break;
       case 'topic': result=await api('topic',fields); break;
       case 'topic-edit': result=await api('topic-edit',{topic:form.dataset.topic,...fields}); editing=''; break;
       case 'schedule': result=await api('schedule',{...fields,notify:data.has('notify')}); break;
@@ -236,7 +276,7 @@ root.addEventListener('submit',event=>{
     }
     await refresh();
     if(kind==='agenda')draft=meeting.agenda.map(item=>({...item})),drawDraft();
-    tell([{rsvp:'RSVP saved.',topic:'Topic submitted.','topic-edit':'Topic saved.',schedule:'Details saved.',agenda:'Agenda published.',notes:'Outcomes saved.'}[kind],result.notice].filter(Boolean).join(' '));
+    tell([{'action-add':'Action item added.',carry:'',rsvp:'RSVP saved.',topic:'Topic submitted.','topic-edit':'Topic saved.',schedule:'Details saved.',agenda:'Agenda published.',notes:'Outcomes saved.'}[kind],result.notice].filter(Boolean).join(' '));
   });
 });
 root.addEventListener('click',event=>{
@@ -245,6 +285,17 @@ root.addEventListener('click',event=>{
   const action=button.dataset.action;
   perform(button,async()=>{
     if(action==='signout'){await groupApi('signout',{});location.href='/';return;}
+    if(action==='feed'){
+      if(group.feedUrl&&!confirm('Make a new link? The old one will stop working in calendars that use it.'))return;
+      group.feedUrl=(await groupApi('feed',{})).feedUrl;dashboard();tell('Your calendar link is ready.');return;
+    }
+    if(action==='copy-feed'){const f=document.querySelector('#feed');f.select();try{await navigator.clipboard.writeText(f.value);tell('Link copied.');}catch{tell('Link selected. Copy it from the field.');}return;}
+    if(action==='action-done'){
+      await call('/api/meeting',{meeting:button.dataset.meeting,action:'action-done'},{action:button.dataset.item,done:button.dataset.done==='true'});
+      if(id)await refresh();else await reloadGroup();
+      tell(button.dataset.done==='true'?'Marked done.':'Reopened.');return;
+    }
+    if(action==='action-delete'){if(!confirm('Delete this action item?'))return;await api('action-delete',{action:button.dataset.item});await refresh();tell('Deleted.');return;}
     if(action==='delete-comment'){if(!confirm('Delete this comment?'))return;await postsApi('delete-comment',{comment:button.dataset.comment});postId?await reloadPost():await refresh();tell('Comment deleted.');return;}
     if(action==='delete-post'){if(!confirm('Delete this post and its replies?'))return;await postsApi('delete',{post:postId});location.href='/';return;}
     if(action==='pin-post'||action==='hide-post'){
@@ -309,6 +360,8 @@ root.addEventListener('click',event=>{
       draft=meeting.topics.filter(t=>!t.hidden).slice(0,3).map(item=>({label:item.label,detail:item.detail,kind:item.kind,minutes:15}));
     }
     if(action==='add'&&draft.length<15)draft.push({label:'',detail:'',kind:'Discussion',minutes:10});
+    if(action==='add-actions'&&draft.length<15)draft.push({label:'Review open action items',kind:'Update',minutes:10,
+      detail:meeting.openActions.map(a=>'• '+a.title+(a.ownerName?' ('+a.ownerName+')':'')+(a.due?', due '+dueText(a.due):'')).join('\n').slice(0,650)});
     if(action==='remove')draft.splice(i,1);
     if(action==='up')[draft[i-1],draft[i]]=[draft[i],draft[i-1]];
     drawDraft();
