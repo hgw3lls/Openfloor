@@ -21,6 +21,16 @@ Open Floor lets artists submit topics, optionally vote for up to two, and see th
 
 **Topics and voting.** Members suggest topics and vote 👍 or 👎 until the agenda is published, one vote each and never on their own topics. Votes from email count as the same person as votes on the site. Organizers can edit, hide or delete any topic, build the agenda from the top topics, publish it (members get it by email with calendar links), and record and email the outcomes.
 
+## Follow-through
+
+**Action items.** Under a meeting's outcomes, organizers add action items with what needs doing, who owns it, and a due date. The owner gets an email. They can mark it done on the site, with the email's *Mark done* button, or by replying "done" (anything else they write goes to the meeting's discussion). Members see their open items on the dashboard. Reminders go out two days before, on the due date, and once when overdue. The *Email outcomes* button includes the action items, and the agenda builder can add a "Review open action items" item.
+
+**Carry-over.** Topics that didn't make a meeting's agenda move to the next meeting: automatically when a repeating meeting creates the next one, or with *Move unused topics* on the organizer panel. They keep their author and show as "Carried over".
+
+**Decisions.** The *Decisions* page lists past meetings with their agendas, decisions and action items, with a search box.
+
+**Calendar.** Each member can get a private calendar link from the dashboard (Google, Apple or Outlook). It lists every meeting with their RSVP, and their own action items on their due dates, and updates on its own. Making a new link turns off the old one.
+
 ## Posts and replying by email
 
 **Posts.** Any member can post an announcement or question from the dashboard, and others reply. Organizers can pin, hide or delete posts; authors can delete their own. Each meeting also has a discussion, and members can comment on topics.
