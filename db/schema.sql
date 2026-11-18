@@ -31,3 +31,11 @@ INSERT INTO members (id,email,name,role,status,token,created) SELECT DISTINCT ON
 UPDATE subscribers SET status='migrated' WHERE status='active'
 ;
 UPDATE ballots b SET voter='m:'||substr(b.voter,3) WHERE b.voter LIKE 's:%' AND EXISTS (SELECT 1 FROM members m WHERE m.id=substr(b.voter,3)) AND NOT EXISTS (SELECT 1 FROM ballots x WHERE x.topic=b.topic AND x.voter='m:'||substr(b.voter,3))
+;
+CREATE TABLE IF NOT EXISTS posts (id TEXT PRIMARY KEY, author TEXT NOT NULL REFERENCES members(id), title TEXT NOT NULL, body TEXT NOT NULL DEFAULT '', pinned BOOLEAN NOT NULL DEFAULT false, hidden BOOLEAN NOT NULL DEFAULT false, created BIGINT NOT NULL);
+CREATE TABLE IF NOT EXISTS comments (id TEXT PRIMARY KEY, kind TEXT NOT NULL, target TEXT NOT NULL, author TEXT NOT NULL REFERENCES members(id), body TEXT NOT NULL, via TEXT NOT NULL DEFAULT 'web', hidden BOOLEAN NOT NULL DEFAULT false, created BIGINT NOT NULL);
+CREATE INDEX IF NOT EXISTS comments_target ON comments (kind, target, created);
+CREATE TABLE IF NOT EXISTS reply_keys (key TEXT PRIMARY KEY, member TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE, kind TEXT NOT NULL, target TEXT NOT NULL, created BIGINT NOT NULL, UNIQUE(member,kind,target));
+CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+ALTER TABLE members ADD COLUMN IF NOT EXISTS digest TEXT NOT NULL DEFAULT 'daily';
+ALTER TABLE members ADD COLUMN IF NOT EXISTS digest_at BIGINT NOT NULL DEFAULT 0
