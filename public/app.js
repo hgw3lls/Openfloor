@@ -143,21 +143,33 @@ function organize(){
     '<section class="panel admin"><h2>Needs attention</h2>'+(attention.length?'<ul class="attention">'+attention.join('')+'</ul>':'<p class="muted">Nothing right now.</p>')+'</section>'+
     '<section class="panel"><h2>Meetings</h2>'+(o.meetings.length?'<ul class="subs">'+o.meetings.map(x=>'<li><span><strong>'+esc(x.title)+'</strong> <span class="muted">'+esc(x.when)+' · '+x.going+' going · '+x.maybe+' maybe · '+x.declined+' can’t · '+x.noAnswer+' no answer · '+x.topics+(x.topics===1?' topic':' topics')+'</span></span><span class="actions"><a class="button alt small" href="#'+x.id+'">View</a><a class="button small" href="#'+x.id+'/manage">Manage</a></span></li>').join('')+'</ul>':'<p class="muted">No upcoming meetings.</p>')+
       '<details class="draft"><summary>New meeting</summary><form data-form="new-meeting"><p class="muted">Everyone on the member list gets an email with RSVP buttons.</p><label>Name<input name="title" required maxlength="100" placeholder="Monthly members meeting"></label>'+timeFields({timezone:zone(),duration:90})+'<button>Create and invite members</button></form></details></section>'+
+    organizersPanel()+
     '<section class="panel"><h2>Quick links</h2><div class="actions"><a class="button alt" href="#members">Members and invitations</a><a class="button alt" href="#events">Events and sign-ups</a><a class="button alt" href="#decisions">Decisions</a></div>'+
       '<h3>Download</h3><div class="actions"><a class="button alt" href="/api/export?what=members">Members</a><a class="button alt" href="/api/export?what=meetings">Meetings and outcomes</a><a class="button alt" href="/api/export?what=attendance">Attendance</a></div></section>'+
     '<section class="panel"><h2>Email</h2><p>'+e.sent_today+' sent in the last 24 hours (limit '+e.limit+') · '+e.waiting+' waiting · '+e.retrying+' being retried · '+e.failed+' failed</p><p class="muted">Email replies last checked '+esc(checked)+'. '+m.no_email+(m.no_email===1?' member has':' members have')+' email turned off.</p></section>'+
     '<section class="panel"><h2>See it as a member</h2><p class="muted">Preview shows every page exactly as a regular member sees it: no vote counts before the agenda, no hidden topics, no organizer tools.</p><button type="button" data-action="preview">Preview as member</button></section>';
 }
+function organizersPanel(){
+  const list=group.members||[], orgs=list.filter(m=>m.role==='organizer'&&m.status==='active'), pending=list.filter(m=>m.role==='organizer'&&m.status==='invited');
+  const candidates=list.filter(m=>m.status==='active'&&m.role!=='organizer');
+  const only=orgs.length<=1;
+  return '<section class="panel"><h2>Organizers</h2><p class="muted">Organizers run meetings and events, manage members, and see this panel. Join requests are emailed to all of them.</p>'+
+    '<ul class="subs">'+orgs.map(m=>'<li><span><strong>'+esc(m.name||m.email)+'</strong> <span class="muted">'+esc(m.email)+(m.id===group.me.id?' · you':'')+'</span></span><span class="actions">'+(only?'<span class="muted">The group needs at least one</span>':'<button type="button" class="alt small" data-action="role" data-member="'+m.id+'" data-role="member">'+(m.id===group.me.id?'Step down':'Make member')+'</button>')+'</span></li>').join('')+
+      pending.map(m=>'<li><span><strong>'+esc(m.name||m.email)+'</strong> <span class="muted">invited as organizer, hasn’t joined yet</span></span></li>').join('')+'</ul>'+
+    (candidates.length?'<form data-form="promote" class="draft"><label>Make a member an organizer<select name="member">'+candidates.map(m=>'<option value="'+m.id+'">'+esc(m.name||m.email)+(m.name?' · '+esc(m.email):'')+'</option>').join('')+'</select></label><button>Make organizer</button></form>':'')+
+    '<p class="muted">Not a member yet? <a href="#members">Invite them as an organizer</a>.</p></section>';
+}
 function members(){
-  const list=group.members||[], requests=list.filter(m=>m.status==='requested'), rest=list.filter(m=>m.status!=='requested');
+  const list=group.members||[], requests=list.filter(m=>m.status==='requested'), orgs=list.filter(m=>m.status!=='requested'&&m.role==='organizer'), rest=list.filter(m=>m.status!=='requested'&&m.role!=='organizer');
   const label={active:'Member',invited:'Invited, hasn’t joined yet'};
-  const row=m=>'<li><span><strong>'+esc(m.name||m.email)+'</strong> <span class="muted">'+(m.name?esc(m.email)+' · ':'')+(m.role==='organizer'?'Organizer':label[m.status]||m.status)+(m.emails==='none'?' · emails off':'')+'</span></span><span class="actions">'+
+  const row=m=>'<li><span><strong>'+esc(m.name||m.email)+'</strong> <span class="muted">'+(m.name?esc(m.email)+' · ':'')+(m.role==='organizer'?(m.status==='invited'?'Invited as organizer, hasn’t joined yet':'Organizer'):label[m.status]||m.status)+(m.emails==='none'?' · emails off':'')+'</span></span><span class="actions">'+
     (m.status==='requested'?'<button type="button" class="small" data-action="approve" data-member="'+m.id+'">Approve</button><button type="button" class="alt small" data-action="decline" data-member="'+m.id+'">Decline</button>':
      (m.status==='active'?'<button type="button" class="alt small" data-action="role" data-member="'+m.id+'" data-role="'+(m.role==='organizer'?'member':'organizer')+'">'+(m.role==='organizer'?'Make member':'Make organizer')+'</button>':'')+
      (m.id!==group.me.id?'<button type="button" class="alt small" data-action="remove-member" data-member="'+m.id+'" data-name="'+esc(m.name||m.email)+'">Remove</button>':''))+'</span></li>';
   root.innerHTML=hero('Members',list.filter(m=>m.status==='active').length+' active members','','<p><a href="#organize">← Organizer panel</a></p>')+
     (requests.length?'<section class="panel admin"><h2>Waiting for approval</h2><ul class="subs">'+requests.map(row).join('')+'</ul></section>':'')+
-    '<form class="panel" data-form="add-members"><h2>Add people</h2><p class="muted">One person per line, like <code>Ana Ruiz &lt;ana@example.org&gt;</code> or just an email. Each person gets an invitation to accept, so nobody is added without agreeing.</p><label>People<textarea name="people" maxlength="20000"></textarea></label><button>Send invitations</button></form>'+
+    '<form class="panel" data-form="add-members"><h2>Add people</h2><p class="muted">One person per line, like <code>Ana Ruiz &lt;ana@example.org&gt;</code> or just an email. Each person gets an invitation to accept, so nobody is added without agreeing.</p><label>People<textarea name="people" maxlength="20000"></textarea></label><label class="check"><input type="checkbox" name="organizer"> Make them organizers</label><button>Send invitations</button></form>'+
+    '<section class="panel"><h2>Organizers</h2><ul class="subs">'+orgs.map(row).join('')+'</ul></section>'+
     '<section class="panel"><h2>Member list</h2>'+(rest.length?'<ul class="subs">'+rest.map(row).join('')+'</ul>':'<p class="muted">No members yet.</p>')+'</section>';
 }
 
@@ -370,7 +382,8 @@ root.addEventListener('submit',ev=>{
       case 'join': result=await groupApi('join',fields); form.reset(); tell(result.notice); return;
       case 'setup': await groupApi('setup',fields); location.href='/'; return;
       case 'profile': await groupApi('profile',{name:fields.name,emails:fields.email==='none'?'none':'all',digest:fields.email==='none'?undefined:fields.email}); await refresh(); tell('Settings saved.'); return;
-      case 'add-members': result=await groupApi('add',{people:fields.people}); await refresh(); tell(result.notice); return;
+      case 'add-members': result=await groupApi('add',{people:fields.people,role:data.has('organizer')?'organizer':'member'}); await refresh(); tell(result.notice); return;
+      case 'promote': result=await groupApi('role',{member:fields.member,role:'organizer'}); await refresh(); tell(result.notice); return;
       case 'post': {const created=await postsApi('create',fields); location.hash='post/'+created.id; return;}
       case 'comment': await postsApi('comment',{kind:form.dataset.kind,target:form.dataset.target,body:fields.body}); await refresh(); tell('Reply posted.'); return;
       case 'new-meeting': {const created=await api('',fields,''); location.hash=created.id+'/manage'; return;}
@@ -406,7 +419,9 @@ root.addEventListener('click',ev=>{
     }
     if(['approve','decline','role','remove-member'].includes(action)){
       if(action==='remove-member'&&!confirm('Remove '+d.name+' from the group?'))return;
+      if(action==='role'&&d.role==='member'&&d.member===group.me.id&&!confirm('Step down as organizer? You’ll lose access to the organizer panel.'))return;
       const result=await groupApi(action==='remove-member'?'remove':action,{member:d.member,role:d.role});
+      if(action==='role'&&d.member===group.me.id){location.href='/';return;}
       await refresh(); tell(result.notice); return;
     }
     if(action==='delete-comment'){if(!confirm('Delete this comment?'))return;await postsApi('delete-comment',{comment:d.comment});await refresh();tell('Comment deleted.');return;}
