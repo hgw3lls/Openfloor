@@ -2,7 +2,7 @@
 // Vercel build (npm run build). Every statement uses IF NOT EXISTS, so it is
 // safe to run on every deploy.
 import {readFile} from 'node:fs/promises';
-import {neon} from '@neondatabase/serverless';
+import {neon} from "@neondatabase/serverless";
 
 const url = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 if (!url) {

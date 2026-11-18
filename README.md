@@ -11,8 +11,34 @@ Open Floor lets artists submit topics, optionally vote for up to two, and see th
 
 ## Run a meeting
 
-Enter the organizer key to create a meeting. Bookmark the organizer URL and use **Copy participant link** to invite the group. The organizer URL grants editing access to that meeting. The participant link grants access to its topics, voting, agenda, and outcomes. Votes are limited to two topics per browser cookie.
+Enter the organizer key to create a meeting. Bookmark the organizer URL and use **Copy participant link** to invite the group. The organizer URL grants editing access to that meeting. The participant link grants access to its topics, voting, agenda, and outcomes. Anyone with the link can vote 👍 or 👎 on each topic until the agenda is published. Vote counts are shown to the organizer, and to everyone once the agenda is published.
 
 You can open voting after collecting topics, or publish an agenda directly. Add deadlines or underrepresented topics manually and reorder the items before publishing. Use **Meeting outcomes** to record decisions and who will follow up.
 
 The Vercel deployment uses its own database and generates new meeting links. The previous deployment's records are not imported automatically.
+
+## Email updates
+
+People can join a meeting's email list from the participant page ("Get updates by email"), or the organizer can paste in a list of addresses. Everyone gets a confirmation email first, so nobody is added without agreeing. After that they get:
+
+- **A daily digest of new topics**, with 👍 / 👎 buttons on each one. Tapping a button opens a page where one more tap saves the vote. That extra tap stops email security scanners, which open links automatically, from casting votes.
+- **"Vote on the topics"**, when the organizer closes submissions.
+- **The agenda**, with *Add to calendar* and *Google Calendar* links, when it's first published. The organizer can resend it.
+- **"Save the date"**, when the organizer sets or changes the meeting time.
+- **A reminder** about a day before the meeting.
+- **The outcomes**, when the organizer clicks *Email outcomes*.
+
+Every email has an unsubscribe link and the one-click unsubscribe header that Gmail and Yahoo require.
+
+### Setup
+
+1. Create a [Resend](https://resend.com) account. Under **Domains**, add the domain you'll send from, and add the DNS records it shows at your domain host.
+2. Create an API key in Resend.
+3. In Vercel, set these environment variables for Production, then redeploy:
+   - `RESEND_API_KEY`: the Resend API key.
+   - `EMAIL_FROM`: for example `Open Floor <meetings@your-domain.org>`, on the domain you verified.
+   - `CRON_SECRET`: a long random value. Vercel uses it to call the daily email job.
+   - `APP_URL`: the public address, for example `https://tower-press-org.vercel.app`, used for links in the daily emails.
+   - `EMAIL_REPLY_TO` (optional): where replies to the emails go.
+
+The daily job runs at 16:00 UTC (see `vercel.json`).
