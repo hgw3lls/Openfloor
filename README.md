@@ -23,11 +23,11 @@ Open Floor lets artists submit topics, optionally vote for up to two, and see th
 
 ## Organizer panel and member preview
 
-Organizers have an **Organizer** link in the top bar. It opens an overview of what needs attention: join requests, overdue and unassigned action items, events still needing helpers, and email problems. Below that are upcoming meetings with RSVP counts, a new-meeting form, quick links, downloads, and email health (sent today against the limit, waiting, retrying, failed, and when replies were last checked).
+Organizers land on the **Organizer** panel when they open the site. It shows what needs attention: join requests, overdue and unassigned action items, events still needing helpers, and email problems. Below that are upcoming meetings with RSVP counts, a new-meeting form, the organizers list, quick links, downloads, and email health (sent today against the limit, waiting, retrying, failed, and when replies were last checked).
 
-Member pages stay clean. On a meeting or event page, organizers see a slim bar with **Manage this meeting** (or event), which opens that item's own organizer page: attendance, topics with vote counts and moderation, the agenda builder, outcomes and action items, carry-over, and details.
+For organizers, meeting and event links (including links in emails) open the **Manage** version: attendance, topics with vote counts and moderation, the agenda builder, outcomes and action items, carry-over, and details. Each Manage page links to the member page, for RSVPing, voting and signing up. **Your page** in the top bar is the organizer's own member dashboard, with their RSVPs, action items, sign-ups, calendar link and email settings.
 
-**Preview as member** (top bar) shows every page exactly as a regular member sees it, with a banner to leave preview.
+**Preview as member** (top bar) switches the whole site to what regular members see (dashboard, meeting and event pages) with a banner to leave preview.
 
 ## Events and sign-ups
 

@@ -3,10 +3,11 @@ const root=document.querySelector('#app'), status=document.querySelector('#statu
 const isId=v=>/^[a-f0-9-]{36}$/.test(v||'');
 const parts=location.hash.slice(1).split('/');
 const route={page:'home'};
-if(isId(parts[0])){route.page='meeting';route.id=parts[0];if(parts[1]==='manage')route.manage=true;else if(isId(parts[1])){route.secret=parts[1];route.manage=true;}}
-else if(parts[0]==='event'&&isId(parts[1])){route.page='event';route.id=parts[1];route.manage=parts[2]==='manage';}
+// Organizers get the organizer version of a page by default; '/view' (or preview) shows the member version.
+if(isId(parts[0])){route.page='meeting';route.id=parts[0];if(parts[1]==='manage')route.manage=true;else if(parts[1]==='view')route.view=true;else if(isId(parts[1])){route.secret=parts[1];route.manage=true;}}
+else if(parts[0]==='event'&&isId(parts[1])){route.page='event';route.id=parts[1];route.manage=parts[2]==='manage';route.view=parts[2]==='view';}
 else if(parts[0]==='post'&&isId(parts[1])){route.page='post';route.id=parts[1];}
-else if(['organize','members','decisions','events'].includes(parts[0]))route.page=parts[0];
+else if(['organize','members','decisions','events','me'].includes(parts[0]))route.page=parts[0];
 
 const categories=['Discussion','Decision','Update'];
 const repeatLabels={'':'Does not repeat',weekly:'Every week',biweekly:'Every two weeks',monthly:'Every month (same weekday)'};
@@ -54,8 +55,8 @@ function header(){
   const me=group?.me;
   if(!me){nav.innerHTML='<a href="/">Sign in</a>';banner.innerHTML='';return;}
   const link=(href,label,page)=>'<a href="'+href+'"'+(route.page===page?' class="on"':'')+'>'+label+'</a>';
-  nav.innerHTML=link('/','Meetings','home')+link('#events','Events','events')+link('#decisions','Decisions','decisions')+
-    (organizer()?link('#organize','Organizer','organize'):'')+
+  const home=organizer()?link('/','Organizer',route.page==='organize'?'organize':'home')+link('#me','Your page','me'):link('/','Meetings',route.page==='me'?'me':'home');
+  nav.innerHTML=home+link('#events','Events','events')+link('#decisions','Decisions','decisions')+
     '<span class="who">'+esc(me.name||me.email)+'</span>'+
     (realOrganizer()?'<button type="button" class="alt" data-action="preview">'+(preview?'Exit preview':'Preview as member')+'</button>':'');
   banner.innerHTML=preview?'You’re previewing the site as a regular member. <button type="button" data-action="preview">Exit preview</button>':'';
@@ -68,7 +69,7 @@ function comments(list,{kind,target,form=true,small=false}={}){
     (form?'<form class="reply" data-form="comment" data-kind="'+kind+'" data-target="'+target+'"><label><span class="sr">Your reply</span><textarea name="body" maxlength="3000" required placeholder="Write a reply…"></textarea></label><button>Reply</button></form>':'');
 }
 function actionRow(a,{showMeeting=false,canDone=false,canDelete=false}={}){
-  return '<li class="action'+(a.status==='done'?' done':'')+'"><span><strong>'+esc(a.title)+'</strong> <span class="muted">'+[esc(a.ownerName||'No owner yet'),a.due?(overdue(a)?'<span class="late">overdue, was due '+esc(dueText(a.due))+'</span>':'due '+esc(dueText(a.due))):'',showMeeting?'<a href="#'+a.meeting+'">'+esc(a.meetingTitle)+'</a>':''].filter(Boolean).join(' · ')+'</span></span><span class="actions">'+
+  return '<li class="action'+(a.status==='done'?' done':'')+'"><span><strong>'+esc(a.title)+'</strong> <span class="muted">'+[esc(a.ownerName||'No owner yet'),a.due?(overdue(a)?'<span class="late">overdue, was due '+esc(dueText(a.due))+'</span>':'due '+esc(dueText(a.due))):'',showMeeting?'<a href="#'+a.meeting+(organizer()?'/view':'')+'">'+esc(a.meetingTitle)+'</a>':''].filter(Boolean).join(' · ')+'</span></span><span class="actions">'+
     (canDone?'<button type="button" class="'+(a.status==='done'?'alt ':'')+'small" data-action="action-done" data-item="'+a.id+'" data-meeting="'+a.meeting+'" data-done="'+(a.status!=='done')+'">'+(a.status==='done'?'Reopen':'Done')+'</button>':'')+
     (canDelete?'<button type="button" class="alt small" data-action="action-delete" data-item="'+a.id+'">Delete</button>':'')+'</span></li>';
 }
@@ -92,18 +93,18 @@ function welcome(){
 /* Member dashboard */
 function meetingCard(m){
   const chip=m.mine?'<span class="chip rsvp-'+m.mine+'">'+rsvpLabels[m.mine]+'</span>':(m.past?'':'<span class="chip todo">RSVP needed</span>');
-  return '<a class="card" href="#'+m.id+'"><strong>'+esc(m.title)+'</strong><span class="muted">'+esc(m.when||'Date to be set')+(m.location?' · '+esc(m.location):'')+'</span><span class="mono">'+chip+(m.going?'<span>'+m.going+' going</span>':'')+'</span></a>';
+  return '<a class="card" href="#'+m.id+(organizer()?'/view':'')+'"><strong>'+esc(m.title)+'</strong><span class="muted">'+esc(m.when||'Date to be set')+(m.location?' · '+esc(m.location):'')+'</span><span class="mono">'+chip+(m.going?'<span>'+m.going+' going</span>':'')+'</span></a>';
 }
 function eventCard(e){
   const open=e.spots-e.taken;
-  return '<a class="card" href="#event/'+e.id+'"><span class="mono"><span class="tag">'+esc(e.kind)+'</span>'+(e.signedUp?'<span class="chip rsvp-yes">You’re helping</span>':'')+(open>0?'<span class="chip todo">'+open+(open===1?' spot':' spots')+' open</span>':'')+(e.hidden?'<span>hidden</span>':'')+'</span><strong>'+esc(e.title)+'</strong><span class="muted">'+esc(e.when)+(e.location?' · '+esc(e.location):'')+'</span></a>';
+  return '<a class="card" href="#event/'+e.id+(organizer()&&route.page!=='events'?'/view':'')+'"><span class="mono"><span class="tag">'+esc(e.kind)+'</span>'+(e.signedUp?'<span class="chip rsvp-yes">You’re helping</span>':'')+(open>0?'<span class="chip todo">'+open+(open===1?' spot':' spots')+' open</span>':'')+(e.hidden?'<span>hidden</span>':'')+'</span><strong>'+esc(e.title)+'</strong><span class="muted">'+esc(e.when)+(e.location?' · '+esc(e.location):'')+'</span></a>';
 }
 function dashboard(){
   const me=group.me;
   root.innerHTML=hero(group.group,'Hi'+(me.name?', '+me.name:'')+'.')+
-    orgbar('Open the organizer panel','#organize')+
+    orgbar('Back to the organizer panel','/')+
     (group.myActions?.length?'<section class="panel"><h2>Your action items</h2><ul class="subs">'+group.myActions.map(a=>actionRow(a,{showMeeting:true,canDone:true})).join('')+'</ul></section>':'')+
-    (group.mySlots?.length?'<section class="panel"><h2>Your sign-ups</h2><ul class="subs">'+group.mySlots.map(s=>'<li><span><strong>'+esc(s.label)+'</strong> <span class="muted">'+esc(s.when)+' · <a href="#event/'+s.event+'">'+esc(s.eventTitle)+'</a></span></span></li>').join('')+'</ul></section>':'')+
+    (group.mySlots?.length?'<section class="panel"><h2>Your sign-ups</h2><ul class="subs">'+group.mySlots.map(s=>'<li><span><strong>'+esc(s.label)+'</strong> <span class="muted">'+esc(s.when)+' · <a href="#event/'+s.event+(organizer()?'/view':'')+'">'+esc(s.eventTitle)+'</a></span></span></li>').join('')+'</ul></section>':'')+
     '<section class="panel"><h2>Upcoming meetings</h2>'+(group.meetings.upcoming.length?group.meetings.upcoming.map(meetingCard).join(''):'<p class="muted">No meetings scheduled yet.</p>')+'</section>'+
     '<section class="panel"><h2>Coming up</h2>'+(group.comingUp?.length?group.comingUp.map(eventCard).join(''):'<p class="muted">No events yet.</p>')+'<p><a href="#events">All events, and add your own →</a></p></section>'+
     '<section class="panel"><h2>Posts</h2><p class="muted">Announcements, questions and news for the group. Everyone gets them by email and can reply from their inbox.</p>'+
@@ -134,14 +135,14 @@ function organize(){
     m.requested?'<li><a href="#members">'+m.requested+(m.requested===1?' person wants':' people want')+' to join</a></li>':'',
     a.overdue?'<li>'+a.overdue+' overdue action '+(a.overdue===1?'item':'items')+' (they’ll show in the agenda builder)</li>':'',
     a.unowned?'<li>'+a.unowned+' action '+(a.unowned===1?'item has':'items have')+' no owner</li>':'',
-    ...help.map(ev=>'<li><a href="#event/'+ev.id+'/manage">'+esc(ev.title)+'</a> needs '+(ev.spots-ev.taken)+' more '+((ev.spots-ev.taken)===1?'helper':'helpers')+'</li>'),
+    ...help.map(ev=>'<li><a href="#event/'+ev.id+'">'+esc(ev.title)+'</a> needs '+(ev.spots-ev.taken)+' more '+((ev.spots-ev.taken)===1?'helper':'helpers')+'</li>'),
     e.failed?'<li class="late">'+e.failed+' '+(e.failed===1?'email':'emails')+' couldn’t be sent after 5 tries</li>':'',
     m.invited?'<li>'+m.invited+' invited '+(m.invited===1?'person hasn’t':'people haven’t')+' joined yet</li>':''].filter(Boolean);
   const checked=e.repliesCheckedAt?ago(e.repliesCheckedAt):'not yet';
   root.innerHTML=hero('Organizer','Everything that needs your attention, in one place.')+
     '<div class="stats"><div class="stat"><a href="#members"><b>'+m.active+'</b>members</a></div><div class="stat"><b>'+o.meetings.length+'</b>upcoming meetings</div><div class="stat"><b>'+a.open+'</b>open action items</div><div class="stat"><b>'+e.sent_today+'/'+e.limit+'</b>emails today</div></div>'+
     '<section class="panel admin"><h2>Needs attention</h2>'+(attention.length?'<ul class="attention">'+attention.join('')+'</ul>':'<p class="muted">Nothing right now.</p>')+'</section>'+
-    '<section class="panel"><h2>Meetings</h2>'+(o.meetings.length?'<ul class="subs">'+o.meetings.map(x=>'<li><span><strong>'+esc(x.title)+'</strong> <span class="muted">'+esc(x.when)+' · '+x.going+' going · '+x.maybe+' maybe · '+x.declined+' can’t · '+x.noAnswer+' no answer · '+x.topics+(x.topics===1?' topic':' topics')+'</span></span><span class="actions"><a class="button alt small" href="#'+x.id+'">View</a><a class="button small" href="#'+x.id+'/manage">Manage</a></span></li>').join('')+'</ul>':'<p class="muted">No upcoming meetings.</p>')+
+    '<section class="panel"><h2>Meetings</h2>'+(o.meetings.length?'<ul class="subs">'+o.meetings.map(x=>'<li><span><strong>'+esc(x.title)+'</strong> <span class="muted">'+esc(x.when)+' · '+x.going+' going · '+x.maybe+' maybe · '+x.declined+' can’t · '+x.noAnswer+' no answer · '+x.topics+(x.topics===1?' topic':' topics')+'</span></span><span class="actions"><a class="button alt small" href="#'+x.id+'/view">Member page</a><a class="button small" href="#'+x.id+'">Manage</a></span></li>').join('')+'</ul>':'<p class="muted">No upcoming meetings.</p>')+
       '<details class="draft"><summary>New meeting</summary><form data-form="new-meeting"><p class="muted">Everyone on the member list gets an email with RSVP buttons.</p><label>Name<input name="title" required maxlength="100" placeholder="Monthly members meeting"></label>'+timeFields({timezone:zone(),duration:90})+'<button>Create and invite members</button></form></details></section>'+
     organizersPanel()+
     '<section class="panel"><h2>Quick links</h2><div class="actions"><a class="button alt" href="#members">Members and invitations</a><a class="button alt" href="#events">Events and sign-ups</a><a class="button alt" href="#decisions">Decisions</a></div>'+
@@ -166,7 +167,7 @@ function members(){
     (m.status==='requested'?'<button type="button" class="small" data-action="approve" data-member="'+m.id+'">Approve</button><button type="button" class="alt small" data-action="decline" data-member="'+m.id+'">Decline</button>':
      (m.status==='active'?'<button type="button" class="alt small" data-action="role" data-member="'+m.id+'" data-role="'+(m.role==='organizer'?'member':'organizer')+'">'+(m.role==='organizer'?'Make member':'Make organizer')+'</button>':'')+
      (m.id!==group.me.id?'<button type="button" class="alt small" data-action="remove-member" data-member="'+m.id+'" data-name="'+esc(m.name||m.email)+'">Remove</button>':''))+'</span></li>';
-  root.innerHTML=hero('Members',list.filter(m=>m.status==='active').length+' active members','','<p><a href="#organize">← Organizer panel</a></p>')+
+  root.innerHTML=hero('Members',list.filter(m=>m.status==='active').length+' active members','','<p><a href="/">← Organizer panel</a></p>')+
     (requests.length?'<section class="panel admin"><h2>Waiting for approval</h2><ul class="subs">'+requests.map(row).join('')+'</ul></section>':'')+
     '<form class="panel" data-form="add-members"><h2>Add people</h2><p class="muted">One person per line, like <code>Ana Ruiz &lt;ana@example.org&gt;</code> or just an email. Each person gets an invitation to accept, so nobody is added without agreeing.</p><label>People<textarea name="people" maxlength="20000"></textarea></label><label class="check"><input type="checkbox" name="organizer"> Make them organizers</label><button>Send invitations</button></form>'+
     '<section class="panel"><h2>Organizers</h2><ul class="subs">'+orgs.map(row).join('')+'</ul></section>'+
@@ -204,7 +205,7 @@ function meetingHero(){
 }
 function meetingView(){
   const open=meeting.phase!=='agenda', list=meeting.actions||[];
-  root.innerHTML=meetingHero()+orgbar('Manage this meeting','#'+meeting.id+'/manage')+
+  root.innerHTML=meetingHero()+orgbar('Manage this meeting','#'+meeting.id)+
     rsvpPanel()+
     (meeting.phase==='agenda'?'<section class="panel"><h2>Agenda</h2><p class="mono">'+meeting.agenda.reduce((total,item)=>total+item.minutes,0)+' minutes</p>'+meeting.agenda.map(item=>'<div class="topic"><div class="mono"><span class="tag">'+esc(item.kind)+'</span>'+item.minutes+' min</div><strong>'+esc(item.label)+'</strong>'+(item.detail?'<p>'+para(item.detail)+'</p>':'')+'</div>').join('')+'</section>':'')+
     (meeting.notes?'<section class="panel"><h2>Decisions and next steps</h2><div class="note">'+esc(meeting.notes)+'</div></section>':'')+
@@ -226,7 +227,7 @@ function readDraft(){
 }
 function meetingManage(){
   const a=meeting.attendance, list=meeting.actions||[], link=(meeting.appUrl||location.origin)+'/#'+meeting.id;
-  root.innerHTML=hero('Manage: '+meeting.title,meeting.when||meeting.schedule||'Date to be set',{collect:'Topics and voting open',vote:'Final vote',agenda:'Agenda published'}[meeting.phase],'<p><a href="#'+meeting.id+'">← See the member page</a> · <a href="#organize">Organizer panel</a></p>')+
+  root.innerHTML=hero('Manage: '+meeting.title,meeting.when||meeting.schedule||'Date to be set',{collect:'Topics and voting open',vote:'Final vote',agenda:'Agenda published'}[meeting.phase],'<p><a href="#'+meeting.id+'/view">See the member page (to RSVP and vote)</a> · <a href="/">← Organizer panel</a></p>')+
     '<section class="panel admin"><h2>Share and stage</h2><label>Meeting link<input readonly id="invite" value="'+esc(link)+'"></label><div class="actions"><button type="button" data-action="copy" data-target="#invite" class="alt">Copy link</button>'+
       (meeting.phase!=='collect'?'<button type="button" data-action="collect" class="alt">Reopen submissions</button>':'')+
       (meeting.phase==='collect'&&meeting.topics.length?'<button type="button" data-action="phase-vote" class="alt">Close submissions, final vote</button>':'')+'</div></section>'+
@@ -271,14 +272,14 @@ function slotRow(s,{manage=false}={}){
 function eventView(){
   const e=event;
   root.innerHTML=hero(e.title,e.when+(e.location?' · '+e.location:''),e.kind,e.link?'<p class="when"><a href="'+esc(e.link)+'" target="_blank" rel="noopener">'+esc(e.link)+'</a></p>':'')+
-    (e.canEdit&&!preview?'<div class="orgbar"><strong>'+(organizer()?'Organizer':'Your event')+'</strong><a class="button" href="#event/'+e.id+'/manage">Manage this event</a></div>':'')+
+    (e.canEdit&&!preview?'<div class="orgbar"><strong>'+(organizer()?'Organizer':'Your event')+'</strong><a class="button" href="#event/'+e.id+(organizer()?'':'/manage')+'">Manage this event</a></div>':'')+
     (e.description?'<section class="panel"><div class="note">'+para(e.description)+'</div><p class="muted">Added by '+esc(e.author||'a member')+'</p></section>':'')+
     (e.slots.length?'<section class="panel"><h2>Help needed</h2><p class="muted">Sign up for a slot. You’ll get a reminder the day before.</p>'+e.slots.map(s=>slotRow(s)).join('')+'</section>':'')+
     '<section class="panel"><h2>Discussion</h2>'+comments(e.comments,{kind:'event',target:e.id})+'</section>';
 }
 function eventManage(){
   const e=event;
-  root.innerHTML=hero('Manage: '+e.title,e.when,e.kind,'<p><a href="#event/'+e.id+'">← See the event page</a></p>')+
+  root.innerHTML=hero('Manage: '+e.title,e.when,e.kind,'<p><a href="#event/'+e.id+'/view">See the event page (to sign up)</a>'+(organizer()?' · <a href="/">← Organizer panel</a>':'')+'</p>')+
     '<section class="panel admin"><h2>Sign-up slots</h2>'+(e.slots.length?e.slots.map(s=>slotRow(s,{manage:true})).join(''):'<p class="muted">No slots yet.</p>')+
       '<form data-form="slot-add" class="draft"><h3>Add a slot</h3><label>What<input name="label" required maxlength="140" placeholder="Gallery sitting, Saturday 12–3"></label><div class="row"><label>When <small>(optional)</small><input type="datetime-local" name="local"></label><label>People needed<input type="number" name="capacity" min="1" max="100" value="1"></label></div><label>Length (minutes) <small>(optional)</small><input type="number" name="duration" min="0" max="1440" value="180"></label><button>Add slot</button></form></section>'+
     (organizer()?'<section class="panel admin"><h2>Email</h2><div class="actions"><button type="button" data-action="event-announce">'+(e.announced?'Email everyone again':'Email everyone about this event')+'</button><button type="button" class="alt" data-action="event-help">Ask for help (people not signed up yet)</button></div><p class="muted">Events also appear in members’ daily or weekly summaries.</p></section>':'')+
@@ -326,17 +327,24 @@ async function show(){
     case 'event': {
       const r=await eventsApi('',undefined,{event:route.id});eventKinds=r.kinds;event=r.event;document.title=event.title+' · '+group.group;
       if(preview)event={...event,canEdit:false};
-      if(route.manage&&event.canEdit)eventManage();else eventView();
+      const manageEvent=(route.manage||(organizer()&&!route.view))&&event.canEdit;
+      route.manage=manageEvent;
+      if(manageEvent)eventManage();else eventView();
       return;
     }
     case 'post': post=(await postsApi('',undefined,{post:route.id})).post; document.title=post.title+' · '+group.group; postPage(); return;
     case 'meeting': {
       meeting=asMember(await api());document.title=meeting.title+' · '+group.group;
-      if(route.manage&&meeting.admin&&!preview){if(!draft.length)draft=meeting.agenda.map(item=>({...item}));meetingManage();}
+      const manageMeeting=(route.manage||(organizer()&&!route.view))&&meeting.admin&&!preview;
+      route.manage=manageMeeting;
+      if(manageMeeting){if(!draft.length)draft=meeting.agenda.map(item=>({...item}));meetingManage();}
       else meetingView();
       return;
     }
-    default: postList=(await postsApi()).posts; dashboard();
+    case 'me': postList=(await postsApi()).posts; dashboard(); return;
+    default:
+      if(organizer()){route.page='organize';group=await groupApi('',undefined,{view:'organize'});header();organize();return;}
+      postList=(await postsApi()).posts; dashboard();
   }
 }
 async function load(){
