@@ -168,11 +168,11 @@ test('topics and voting: members only, one vote each, not on your own topic; ema
   // Digest: Ana's email has buttons only on Ben's topic, and her email vote replaces her site vote.
   w.mailer.outbox.length = 0;
   const rep = await daily(w.db, w.mailer, ORIGIN);
-  assert.equal(rep.digests, 1);
+  assert.equal(rep.digests, 3, 'each member gets their own summary');
   const anaMail = w.mailer.outbox.find(m => m.to === 'ana@example.org');
-  assert.match(anaMail.subject, /2 new topics/);
-  assert.equal((anaMail.html.match(/a=vote/g) || []).length, 2);
-  assert.match(anaMail.html, /Your topic/);
+  assert.match(anaMail.subject, /^Today at/);
+  assert.equal((anaMail.html.match(/a=vote/g) || []).length, 2, 'only Ben’s topic: your own topics are left out');
+  assert.ok(!anaMail.html.includes('Budget'));
   const voteUrl = link('vote', anaMail.html).replace('v=1', 'v=-1');
   assert.match((await visit(w.db, voteUrl)).text, /Confirm your vote/);
   await visit(w.db, voteUrl, 'POST');
@@ -180,7 +180,7 @@ test('topics and voting: members only, one vote each, not on your own topic; ema
   assert.equal((await w.pg.query("SELECT count(*)::int n FROM ballots")).rows[0].n, 1);
   const forged = link('vote', anaMail.html).replace(/topic=[^&]+/, 'topic=' + budget.id);
   assert.equal((await visit(w.db, forged, 'POST')).status, 403, 'no voting on your own topic from email either');
-  assert.equal((await daily(w.db, w.mailer, ORIGIN)).digests, 0, 'topics announced once');
+  assert.equal((await daily(w.db, w.mailer, ORIGIN)).digests, 0, 'one summary a day');
 });
 
 test('moderation: organizers edit, hide and delete topics; members cannot', async () => {

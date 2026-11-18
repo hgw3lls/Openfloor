@@ -21,6 +21,30 @@ Open Floor lets artists submit topics, optionally vote for up to two, and see th
 
 **Topics and voting.** Members suggest topics and vote 👍 or 👎 until the agenda is published, one vote each and never on their own topics. Votes from email count as the same person as votes on the site. Organizers can edit, hide or delete any topic, build the agenda from the top topics, publish it (members get it by email with calendar links), and record and email the outcomes.
 
+## Posts and replying by email
+
+**Posts.** Any member can post an announcement or question from the dashboard, and others reply. Organizers can pin, hide or delete posts; authors can delete their own. Each meeting also has a discussion, and members can comment on topics.
+
+**Email settings.** Each member chooses *Everything right away* (each post and reply as it happens), *Daily summary* (the default), *Weekly summary* (Mondays), or *Off*. Meeting invitations, agendas and reminders always come right away unless email is off.
+
+**Replying by email.** Every email carries a personal reply address on the group Gmail, like `towerpressartistgroup+k1a2b…@gmail.com`; Gmail delivers these to the normal inbox. The site reads the inbox (over IMAP, with the same app password) and turns each reply into:
+
+| Reply to | Starts with | Becomes |
+| --- | --- | --- |
+| A meeting email | `yes`, `going` | RSVP Going |
+| | `maybe …` | RSVP Maybe (the rest is the reason) |
+| | `no, because …`, `can't make it …` | RSVP Can't make it, with the reason |
+| | `new topic: …` | A new topic (lines below are the details) |
+| | anything else | A comment in the meeting's discussion |
+| A topic (via its Reply link) | `+1` / `-1` | A vote (any text below is also posted as a comment) |
+| A post or a reply | anything | A reply in that conversation |
+
+Quoted text, signatures and "Sent from my iPhone" are removed. A reply only counts if it comes from the member's own address and Gmail verified the sender (DMARC, DKIM or SPF); automatic replies are ignored.
+
+The inbox is read when someone opens the site, by a GitHub Action every 10 minutes (`.github/workflows/inbox.yml`), and by the daily job; it is never read more than once every 4 minutes. Gmail IMAP must be on (it is by default). Set `INBOUND=off` to turn replying by email off.
+
+**Export.** Organizers can download members, meetings with outcomes, and attendance as spreadsheet (CSV) files from the Members page.
+
 ## Email updates
 
 Members get these emails unless they turn email off in their settings or with the unsubscribe link (they stay members):

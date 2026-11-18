@@ -1,0 +1,15 @@
+name: Check email replies
+# Asks the site to read the group inbox for email replies. The site reads it at
+# most every 4 minutes, so extra pings are harmless. GitHub may run this a few
+# minutes late; replies also get picked up whenever someone opens the site.
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+permissions: {}
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - run: curl -fsS -X POST https://tower-press-org.vercel.app/api/inbox

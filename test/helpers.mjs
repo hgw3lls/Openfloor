@@ -4,6 +4,7 @@ import {wrap} from '../lib/db.mjs';
 import {meetings} from '../lib/meetings.mjs';
 import {links} from '../lib/links.mjs';
 import {group} from '../lib/group.mjs';
+import {posts} from '../lib/posts.mjs';
 import {newToken, startSession} from '../lib/auth.mjs';
 
 export const ORIGIN = 'https://floor.test', KEY = 'orgkey';
@@ -52,7 +53,9 @@ export function client(db, mailer, {session, ip = '203.0.113.1'} = {}) {
   }
   const call = (action, payload, {meeting = '', secret} = {}) =>
     send(meetings, '/api/meeting', {meeting, action}, payload, secret ? {Authorization: 'Bearer ' + secret} : {});
-  return {call, get: (meeting = {}) => call(undefined, undefined, meeting), group: (action = '', payload) => send(group, '/api/group', {action}, payload)};
+  const postsHandler = (request, db, key, mailer, defer) => posts(request, db, mailer, defer);
+  return {call, get: (meeting = {}) => call(undefined, undefined, meeting), group: (action = '', payload) => send(group, '/api/group', {action}, payload),
+    posts: (action = '', payload, params = {}) => send(postsHandler, '/api/posts', {action, ...params}, payload)};
 }
 
 export const link = (a, html) => html.match(new RegExp('href="([^"]*a=' + a + '[^"]*)"'))[1].replaceAll('&amp;', '&');
