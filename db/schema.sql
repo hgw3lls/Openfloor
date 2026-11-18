@@ -19,3 +19,15 @@ CREATE TABLE IF NOT EXISTS outbox (id TEXT PRIMARY KEY, meeting TEXT NOT NULL, r
 CREATE INDEX IF NOT EXISTS outbox_status ON outbox (status, created);
 CREATE TABLE IF NOT EXISTS rate_events (key TEXT NOT NULL, at BIGINT NOT NULL);
 CREATE INDEX IF NOT EXISTS rate_events_key ON rate_events (key, at)
+;
+CREATE TABLE IF NOT EXISTS members (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, name TEXT NOT NULL DEFAULT '', role TEXT NOT NULL DEFAULT 'member', status TEXT NOT NULL DEFAULT 'invited', emails TEXT NOT NULL DEFAULT 'all', token TEXT NOT NULL UNIQUE, created BIGINT NOT NULL, invited BIGINT NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, member TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE, created BIGINT NOT NULL, expires BIGINT NOT NULL);
+CREATE TABLE IF NOT EXISTS signin_codes (id TEXT PRIMARY KEY, member TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE, expires BIGINT NOT NULL, used BOOLEAN NOT NULL DEFAULT false);
+CREATE TABLE IF NOT EXISTS rsvps (meeting TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE, member TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE, status TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '', updated BIGINT NOT NULL, PRIMARY KEY(meeting,member));
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS repeat TEXT NOT NULL DEFAULT '';
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS created BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS next_meeting TEXT NOT NULL DEFAULT '';
+INSERT INTO members (id,email,name,role,status,token,created) SELECT DISTINCT ON (email) id,email,'','member','active',token,invited FROM subscribers WHERE status='active' ORDER BY email,invited ON CONFLICT DO NOTHING;
+UPDATE subscribers SET status='migrated' WHERE status='active'
+;
+UPDATE ballots b SET voter='m:'||substr(b.voter,3) WHERE b.voter LIKE 's:%' AND EXISTS (SELECT 1 FROM members m WHERE m.id=substr(b.voter,3)) AND NOT EXISTS (SELECT 1 FROM ballots x WHERE x.topic=b.topic AND x.voter='m:'||substr(b.voter,3))
