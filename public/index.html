@@ -18,7 +18,8 @@ const categories=['Discussion','Decision','Update'];
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let meeting, draft=[];
 const options=selected=>categories.map(kind=>'<option'+(selected===kind?' selected':'')+'>'+kind+'</option>').join('');
-const invite=()=>location.origin+'/#'+id;
+const publicUrl=()=>meeting?.appUrl||location.origin;
+const invite=()=>publicUrl()+'/#'+id;
 const tell=message=>status.textContent=message||'';
 const zone=()=>{try{return Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';}catch{return 'UTC';}};
 const zones=()=>{try{return Intl.supportedValuesOf('timeZone');}catch{return [];}};
@@ -67,7 +68,7 @@ function emailList(){
     '<div class="actions">'+(meeting.agenda.length?'<button type="button" class="alt" data-action="mail-agenda">Email agenda again</button>':'')+(meeting.notes?'<button type="button" class="alt" data-action="mail-outcomes">Email outcomes</button>':'')+'</div></div>';
 }
 function organizer(){
-  return '<section class="panel admin"><h2>Organizer</h2><p class="muted">Bookmark this organizer page. Share the participant link so people can open the meeting without your editing controls.</p><label>Participant link<input readonly id="invite" value="'+esc(invite())+'"></label><div class="actions"><button data-action="copy" class="alt">Copy participant link</button>'+
+  return '<section class="panel admin"><h2>Organizer</h2><p class="muted">Bookmark this organizer page. Share the participant link so people can open the meeting without your editing controls.</p>'+(publicUrl()!==location.origin?'<p class="status">You’re on a private Vercel address that asks people to log in. <a href="'+esc(publicUrl()+'/'+location.hash)+'">Open this page on the public address</a> and bookmark that instead.</p>':'')+'<label>Participant link<input readonly id="invite" value="'+esc(invite())+'"></label><div class="actions"><button data-action="copy" class="alt">Copy participant link</button>'+
     (meeting.phase!=='collect'?'<button data-action="collect" class="alt">Reopen submissions</button>':'')+
     (meeting.phase==='collect'&&meeting.topics.length?'<button data-action="vote" class="alt">Close submissions, final vote</button>':'')+'</div>'+
     scheduleForm()+emailList()+
