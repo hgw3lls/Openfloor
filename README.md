@@ -21,6 +21,20 @@ Open Floor lets artists submit topics, optionally vote for up to two, and see th
 
 **Topics and voting.** Members suggest topics and vote 👍 or 👎 until the agenda is published, one vote each and never on their own topics. Votes from email count as the same person as votes on the site. Organizers can edit, hide or delete any topic, build the agenda from the top topics, publish it (members get it by email with calendar links), and record and email the outcomes.
 
+## Organizer panel and member preview
+
+Organizers have an **Organizer** link in the top bar. It opens an overview of what needs attention: join requests, overdue and unassigned action items, events still needing helpers, and email problems. Below that are upcoming meetings with RSVP counts, a new-meeting form, quick links, downloads, and email health (sent today against the limit, waiting, retrying, failed, and when replies were last checked).
+
+Member pages stay clean. On a meeting or event page, organizers see a slim bar with **Manage this meeting** (or event), which opens that item's own organizer page: attendance, topics with vote counts and moderation, the agenda builder, outcomes and action items, carry-over, and details.
+
+**Preview as member** (top bar) shows every page exactly as a regular member sees it, with a banner to leave preview.
+
+## Events and sign-ups
+
+Any member can add an event (show, opening, workshop, workday, social) on the **Events** page. Events appear on the dashboard, in members' summaries and in everyone's calendar link. Organizers can also email everyone about an event straight away.
+
+An event can have sign-up slots, like "Gallery sitting, Saturday 12–3" for 2 people. Members sign up or drop out on the site or with one tap from an email; slots can't be overfilled. Volunteers get a reminder the day before their slot, and their sign-ups show on their dashboard and calendar. Organizers can **Ask for help**, which emails members who haven't signed up yet, listing the open slots. The person who added an event and organizers can edit it and manage its slots. Each event has a discussion, and replying to an event email adds to it.
+
 ## Follow-through
 
 **Action items.** Under a meeting's outcomes, organizers add action items with what needs doing, who owns it, and a due date. The owner gets an email. They can mark it done on the site, with the email's *Mark done* button, or by replying "done" (anything else they write goes to the meeting's discussion). Members see their open items on the dashboard. Reminders go out two days before, on the due date, and once when overdue. The *Email outcomes* button includes the action items, and the agenda builder can add a "Review open action items" item.
