@@ -189,3 +189,22 @@ test('deleting a meeting: organizers only, removes everything it owns, optional 
   assert.equal(w.mailer.outbox.length, 0);
   assert.equal((await daily(w.db, w.mailer, ORIGIN, start + 4 * 3600000)).created, 0, 'not recreated');
 });
+
+test('vote results in the minutes: organizers record each agenda item’s outcome', async () => {
+  const w = await world();
+  await w.org.call('agenda', {agenda: [{label: 'Press hire day rate goes up to £25', kind: 'Decision', minutes: 15}, {label: 'Winter show opens in Gallery 2', kind: 'Update', minutes: 10}]}, w.M);
+  assert.equal((await w.ana.call('outcome', {index: 0, result: 'carried', for: 9, against: 2}, w.M)).status, 403, 'organizers only');
+  assert.equal((await w.org.call('outcome', {index: 0, result: 'carried', for: '9', against: '2'}, w.M)).status, 200);
+  assert.equal((await w.org.call('outcome', {index: 1, result: 'agreed', for: 5}, w.M)).status, 200);
+  assert.equal((await w.org.call('outcome', {index: 7, result: 'noted'}, w.M)).status, 404);
+  let agenda = (await w.ana.get(w.M)).body.agenda;
+  assert.deepEqual(agenda.map(a => a.outcome), [{result: 'carried', for: 9, against: 2}, {result: 'agreed'}]);
+  // Re-saving the agenda keeps results; an unknown result clears one.
+  await w.org.call('agenda', {agenda: agenda}, w.M);
+  await w.org.call('outcome', {index: 1, result: 'maybe'}, w.M);
+  agenda = (await w.ana.get(w.M)).body.agenda;
+  assert.deepEqual(agenda.map(a => a.outcome), [{result: 'carried', for: 9, against: 2}, undefined]);
+  const {decisions} = await import('../lib/follow.mjs');
+  await w.pg.query('UPDATE meetings SET starts_at=$1', [new Date(Date.now() - 86400000).toISOString()]);
+  assert.deepEqual((await decisions(w.db)).find(m => m.id === w.M.meeting).agenda[0].outcome, {result: 'carried', for: 9, against: 2});
+});

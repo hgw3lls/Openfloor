@@ -239,6 +239,8 @@ function meetingManage(){
     '<section class="panel admin"><h2>Topics</h2><p class="muted">With vote counts. Hide or delete anything that doesn’t belong.</p>'+(meeting.topics.length?meeting.topics.map(t=>topicItem(t,{manage:true})).join(''):'<p class="muted">No topics yet.</p>')+'</section>'+
     '<form data-form="agenda" class="panel admin"><h2>Agenda</h2><p class="muted">Edit the suggested order, make room for urgent items, and publish when ready. Publishing closes submissions and voting and emails the agenda to members.</p><div class="actions"><button type="button" data-action="suggest" class="alt" '+(meeting.topics.length?'':'disabled')+'>Use top three topics</button><button type="button" data-action="add" class="alt">Add agenda item</button>'+(meeting.openActions?.length?'<button type="button" data-action="add-actions" class="alt">Add open action items ('+meeting.openActions.length+')</button>':'')+'</div><div id="draft"></div><button '+(draft.length?'':'disabled')+'>Publish agenda</button></form>'+
     '<section class="panel admin"><h2>Outcomes and action items</h2>'+
+      (meeting.agenda.length?'<h3>What was decided</h3><p class="muted">Record each agenda item’s result. It shows in the minutes and the decisions log.</p>'+meeting.agenda.map((a,i)=>{const o=a.outcome||{};const opt=(v,l)=>'<option value="'+v+'"'+((o.result||'')===v?' selected':'')+'>'+l+'</option>';
+        return '<form class="draft outcome" data-form="outcome" data-index="'+i+'"><strong>'+esc(a.label)+'</strong><div class="row"><label>Result<select name="result">'+opt('','Not recorded')+opt('carried','Carried')+opt('not_carried','Not carried')+opt('agreed','Agreed by all')+opt('noted','Noted')+'</select></label><div class="row"><label>For<input type="number" name="for" min="0" max="999" value="'+esc(o.for??'')+'"></label><label>Against<input type="number" name="against" min="0" max="999" value="'+esc(o.against??'')+'"></label></div></div><button class="alt small">Save result</button></form>';}).join(''):'')+
       (meeting.agenda.length?'<form data-form="notes"><label>Decisions and next steps<textarea name="notes" maxlength="7000" placeholder="What did we decide?">'+esc(meeting.notes)+'</textarea></label><div class="actions"><button>Save outcomes</button>'+((meeting.notes||list.length)?'<button type="button" class="alt" data-action="mail-outcomes">Email outcomes and action items</button>':'')+'<button type="button" class="alt" data-action="mail-agenda">Email agenda again</button></div></form>':'<p class="muted">Publish the agenda to record outcomes.</p>')+
       (list.length?'<ul class="subs">'+list.map(x=>actionRow(x,{canDone:true,canDelete:true})).join('')+'</ul>':'')+
       '<form data-form="action-add" class="draft"><h3>Add an action item</h3><label>What needs to happen?<input name="title" required maxlength="200" placeholder="Book the gallery for March"></label><div class="row"><label>Who<select name="owner"><option value="">Nobody yet</option>'+(meeting.memberOptions||[]).map(m=>'<option value="'+m.id+'">'+esc(m.name)+'</option>').join('')+'</select></label><label>Due<input type="date" name="due"></label></div><button>Add action item</button><p class="muted">The owner gets an email, and reminders before it’s due.</p></form></section>'+
@@ -528,6 +530,7 @@ async function wallSubmit(kind,fields){
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&wallSheet&&document.body.classList.contains('night')){wallSheet=null;wallReason=false;wall();}});
 
 /* Pages that used to live on the dashboard */
+const outcomeText=o=>!o?'':({carried:'Carried',not_carried:'Not carried',agreed:'Agreed by all',noted:'Noted'})[o.result]+(o.for!=null||o.against!=null?' · '+(o.for??0)+' for, '+(o.against??0)+' against':'');
 /* Night screens: every member page in the 5A "Night index" language. */
 const nightPages=new Set(['proposal','home','me','meetings','meeting','events','event','calls','call','settings','group','board','post','decisions','welcome']);
 function brandRow(){
@@ -610,7 +613,7 @@ function minutesView(){
   nightPage((group?.me?backRow('#meetings','Meetings','Minutes'):brandRow())+
     '<div class="w-hero"><h1>'+(d?pad2(d.getDate())+'.'+pad2(d.getMonth()+1):esc(m.title))+'<br><em>minutes</em></h1><div class="w-date">'+esc(m.title.toUpperCase())+'<br>'+came.length+' CAME<br><span class="lime">'+(d?d.getFullYear():'')+'</span></div></div>'+
     (came.length?'<div class="n-faces">'+came.map((n,i)=>avatar(n,i)).join('')+'</div>':'')+
-    (m.agenda.length?sectionHead('Discussed',m.agenda.length+'')+m.agenda.map((a,i)=>'<div class="n-item"><span class="n-big">'+pad2(i+1)+'</span><span class="n-rowmain">'+esc(a.label)+'<small>'+esc(a.kind)+' · '+a.minutes+' min</small></span></div>').join(''):'')+
+    (m.agenda.length?sectionHead(m.agenda.some(a=>a.outcome)?'Decided':'Discussed',m.agenda.length+'')+m.agenda.map((a,i)=>'<div class="n-item'+(a.outcome?.result==='not_carried'?' n-lost':'')+'"><span class="n-big">'+pad2(i+1)+'</span><span class="n-rowmain"><span class="w-ititle">'+esc(a.label)+'</span><small>'+esc(a.outcome?outcomeText(a.outcome):a.kind+' · '+a.minutes+' min')+'</small></span></div>').join(''):'')+
     ((m.actions||[]).length?actionPoster(m.actions):'')+
     (m.notes?sectionHead('Notes')+'<p class="n-notes">'+para(m.notes)+'</p>':'')+
     (!m.agenda.length&&!m.notes&&!(m.actions||[]).length?'<p class="w-none">No minutes were recorded for this meeting.</p>':'')+
@@ -819,7 +822,7 @@ function decisionsPage(){
     const notes=(!decFilter||decFilter==='notes')&&decFilter!=='proposals'&&m.notes&&(!q||m.notes.toLowerCase().includes(q)||m.title.toLowerCase().includes(q));
     if(!items.length&&!notes)return '';
     return '<div class="w-row"><div class="w-day"><span>'+(d?pad2(d.getDate()):'—')+'</span><span class="lime">'+(d?esc(monShort(d)+' '+String(d.getFullYear()).slice(2)):'')+'</span></div><div class="w-items">'+
-      items.map(a=>'<div class="w-item"><span class="eyebrow lime">D-'+a.num+' — '+esc(a.kind)+'</span><a class="w-ititle" href="#'+m.id+(organizer()?'/view':'')+'">'+esc(a.label)+'</a><span class="w-meta">'+esc(m.title)+' · '+a.minutes+' min</span></div>').join('')+
+      items.map(a=>'<div class="w-item'+(a.outcome?.result==='not_carried'?' n-lost':'')+'"><span class="eyebrow lime">D-'+a.num+' — '+esc(a.kind)+'</span><a class="w-ititle" href="#'+m.id+(organizer()?'/view':'')+'">'+esc(a.label)+'</a><span class="w-meta">'+esc(a.outcome?outcomeText(a.outcome)+' · '+m.title:m.title+' · '+a.minutes+' min')+'</span></div>').join('')+
       (notes?'<div class="w-item"><span class="eyebrow lime">Notes</span><span class="n-notes small flush">'+para(m.notes)+'</span></div>':'')+'</div></div>';
   });
   const merged=[...decisionsData.map((m,i)=>({d:m.startsAt?new Date(m.startsAt):new Date(0),html:rows0[i]})),...closedP.map(pRow)].sort((a,b)=>b.d-a.d);
@@ -1028,6 +1031,7 @@ root.addEventListener('submit',ev=>{
       case 'schedule': result=await api('schedule',{...fields,notify:data.has('notify')}); break;
       case 'agenda': readDraft(); result=await api('agenda',{agenda:draft}); draft=[]; break;
       case 'notes': result=await api('notes',{notes:fields.notes}); break;
+      case 'outcome': readDraft(); result=await api('outcome',{index:Number(form.dataset.index),result:fields.result,for:fields.for,against:fields.against}); result.notice=fields.result?'Result saved.':'Result cleared.'; break;
     }
     await refresh();
     tell([{'action-add':'Action item added.',carry:'',rsvp:'RSVP saved.',topic:'Topic submitted.','topic-edit':'Topic saved.',schedule:'Details saved.',agenda:'Agenda published.',notes:'Outcomes saved.'}[kind],result.notice].filter(Boolean).join(' '));
