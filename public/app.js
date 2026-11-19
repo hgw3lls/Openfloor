@@ -292,7 +292,9 @@ function callFields(c={}){
   return '<label>Name<input name="title" required maxlength="160" value="'+esc(c.title||'')+'" placeholder="Spring printmaking residency"></label>'+
     '<div class="row"><label>Type<select name="kind">'+callKinds.map(k=>'<option'+((c.kind||'Other')===k?' selected':'')+'>'+k+'</option>').join('')+'</select></label><label>Deadline<input type="date" name="deadline" required value="'+esc(c.deadline||'')+'"></label></div>'+
     '<div class="row"><label>Offered by<input name="organization" maxlength="160" value="'+esc(c.organization||'')+'" placeholder="Arts council, gallery…"></label><label>Fee or award <small>(optional)</small><input name="award" maxlength="160" value="'+esc(c.award||'')+'" placeholder="$2,000 · free to apply"></label></div>'+
-    '<label>Link<input name="link" maxlength="500" value="'+esc(c.link||'')+'" placeholder="https://"></label><label>Details<textarea name="details" maxlength="5000">'+esc(c.details||'')+'</textarea></label>';
+    '<label>Link<input name="link" maxlength="500" value="'+esc(c.link||'')+'" placeholder="https://"></label><label>Details<textarea name="details" maxlength="5000">'+esc(c.details||'')+'</textarea></label>'+
+    '<div class="row"><label>Who can apply <small>(optional)</small><input name="eligibility" maxlength="300" value="'+esc(c.eligibility||'')+'" placeholder="Printmakers in the region"></label><label>Results <small>(optional)</small><input name="results" maxlength="160" value="'+esc(c.results||'')+'" placeholder="Mid January"></label></div>'+
+    '<label>What to send <small>(one per line, optional; each member gets a checklist)</small><textarea name="needs" maxlength="1500" rows="3" placeholder="CV, one page&#10;Artist statement, 300 words&#10;6 images of recent work">'+esc((c.needs||[]).join('\n'))+'</textarea></label>';
 }
 /* Posts and decisions */
 /* Loading and showing the current page */
@@ -676,13 +678,15 @@ function callsPage(){
 }
 function callPage(){
   const c=call, left=daysUntil(c.deadline);
-  const facts=[['Award',c.award],['Deadline',dueText(c.deadline)+(c.closed?' (closed)':'')],['Offered by',c.organization],['Link',c.link?'<a href="'+esc(c.link)+'" target="_blank" rel="noopener">'+esc(c.link.replace(/^https?:\/\//,''))+'</a>':'']].filter(([,v])=>v);
+  const facts=[['Award',c.award],['Deadline',dueText(c.deadline)+(c.closed?' (closed)':'')],['Offered by',c.organization],['Who',c.eligibility],['Results',c.results],['Link',c.link?'<a href="'+esc(c.link)+'" target="_blank" rel="noopener">'+esc(c.link.replace(/^https?:\/\//,''))+'</a>':'']].filter(([,v])=>v);
   const people=Object.entries(c.people).flatMap(([s,list])=>list.map(n=>({n,s})));
   nightPage(backRow('#calls','Calls',c.kind)+
     '<div class="n-poster lime"><span class="tape"></span>'+(c.closed?'<span class="eyebrow">Closed</span>':'<span class="n-left"><b>'+Math.max(0,left)+'</b><span>'+(left===1?'day':'days')+'<br>to apply</span></span>')+'<span class="w-title">'+esc(c.title)+'</span>'+(c.organization?'<em class="n-org">'+esc(c.organization)+'</em>':'')+'</div>'+
     '<div class="n-facts">'+facts.map(([k,v])=>'<div><span class="eyebrow lime">'+k+'</span><span>'+(k==='Link'?v:esc(v))+'</span></div>').join('')+'</div>'+
     (c.details?sectionHead('Details')+'<p class="n-body">'+para(c.details)+'</p><p class="n-hint">Shared by '+esc(c.author||'a member')+'</p>':'')+
     (can('calls')&&!c.closed?sectionHead('Your status')+statusButtons(c,'ink')+'<p class="n-hint">Interested or applying gets you reminders a week and a day before the deadline.</p>':'')+
+    (c.needs.length&&can('calls')?sectionHead('Your application',c.myChecks.length+' of '+c.needs.length+' ready')+c.needs.map((n,i)=>{const done=c.myChecks.includes(i);return '<div class="n-check night'+(done?' done':'')+'"><button type="button" class="n-box'+(done?' on':'')+'" data-action="n-ccheck" data-item="'+i+'" data-done="'+!done+'" aria-pressed="'+done+'" aria-label="'+esc(n)+'">'+(done?'✓':'')+'</button><span><strong>'+esc(n)+'</strong></span></div>';}).join('')+'<p class="n-hint">Only you see your checklist.</p>':
+      c.needs.length?sectionHead('What to send')+'<ul class="n-needs">'+c.needs.map(n=>'<li>'+esc(n)+'</li>').join('')+'</ul>':'')+
     sectionHead('From the group',people.length+'')+(people.length?people.map((p,i)=>'<div class="n-person">'+avatar(p.n,i)+'<span>'+esc(p.n)+'</span><span class="eyebrow lime">'+interestLabels[p.s]+'</span></div>').join(''):'<p class="w-none">Nobody yet.</p>')+
     (shown('comments')?sectionHead('Discussion',c.comments.length+'')+'<div class="n-talk">'+comments(c.comments,{kind:'call',target:c.id})+'</div>':'')+
     (c.canEdit&&!preview?'<details class="n-add"><summary>Edit this call</summary><form data-form="call-update">'+callFields(c)+'<button>Save</button></form></details><div class="n-danger">'+(organizer()?'<button type="button" data-action="call-hide" data-hidden="'+!c.hidden+'">'+(c.hidden?'Show call':'Hide call')+'</button>':'')+'<button type="button" data-action="call-delete">Delete this call</button></div>':''));
@@ -908,6 +912,7 @@ async function nightClick(action,d,button){
   if(action==='n-checkin'){await groupApi('checkin',{in:d.in==='true'});if(document.querySelector('.wall:not(.night-page)'))await wallReload();else await refresh();tell(d.in==='true'?'You’re in today. See you in the studio.':'Checked out.');return true;}
   if(action==='n-plus'){await postsApi('plus',{post:d.post,plus:d.plus==='true'});await refresh();return true;}
   if(action==='n-pfilter'){postFilter=d.tag;boardPage();return true;}
+  if(action==='n-ccheck'){await callsApi('check',{call:route.id,item:Number(d.item),done:d.done==='true'});await refresh();return true;}
   if(action==='n-mfilter'){memberFilter=d.role;directoryPage();document.querySelectorAll('[data-action=n-mfilter]').forEach(b=>b.classList.toggle('on',b.dataset.role===memberFilter));return true;}
   return false;
 }

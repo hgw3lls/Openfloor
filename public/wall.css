@@ -409,3 +409,9 @@ body .night-page .n-search input,.night-page form input:not([type=radio]):not([t
 .n-tagpick input:focus-visible+span{outline:3px solid var(--purple);outline-offset:2px}
 .night-page .w-sheet .w-sfoot button.w-opt.on,.wall .w-sheet .w-sfoot button.w-opt.on{background:var(--ink);color:var(--lime);border:2px solid var(--ink);min-height:52px;padding:0 18px;margin:0}
 .night-page .w-sheet .w-sfoot button.w-opt.on:disabled{opacity:.4;cursor:default}
+.n-check.night{padding:12px 18px;border-bottom:1px solid var(--rule-strong)}
+.n-check.night .n-box{border-color:var(--lime);color:var(--ink)}
+.n-check.night strong{font:600 16px Geist,system-ui}
+.n-check.night.done strong{opacity:.7}
+.n-needs{margin:0;padding:12px 18px 0 38px}
+.n-needs li{padding:4px 0}
