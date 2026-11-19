@@ -178,6 +178,7 @@ function members(){
   const row=m=>'<li><span><strong>'+esc(m.name||m.email)+'</strong> <span class="muted">'+(m.name?esc(m.email)+' · ':'')+(m.role==='organizer'?(m.status==='invited'?'Invited as organizer, hasn’t joined yet':'Organizer'):label[m.status]||m.status)+(m.emails==='none'?' · emails off':'')+'</span></span><span class="actions">'+
     (m.status==='requested'?'<button type="button" class="small" data-action="approve" data-member="'+m.id+'">Approve</button><button type="button" class="alt small" data-action="decline" data-member="'+m.id+'">Decline</button>':
      (m.status==='active'?'<button type="button" class="alt small" data-action="role" data-member="'+m.id+'" data-role="'+(m.role==='organizer'?'member':'organizer')+'">'+(m.role==='organizer'?'Make member':'Make organizer')+'</button>':'')+
+     (m.status==='active'?'<button type="button" class="alt small" data-action="member-title" data-member="'+m.id+'" data-title="'+esc(m.title||'')+'">'+(m.title?'Role: '+esc(m.title):'Set role')+'</button>':'')+
      (m.id!==group.me.id?'<button type="button" class="alt small" data-action="remove-member" data-member="'+m.id+'" data-name="'+esc(m.name||m.email)+'">Remove</button>':''))+'</span></li>';
   root.innerHTML=hero('Members',list.filter(m=>m.status==='active').length+' active members','','<p><a href="/">← Organizer panel</a></p>')+
     (requests.length?'<section class="panel admin"><h2>Waiting for approval</h2><ul class="subs">'+requests.map(row).join('')+'</ul></section>':'')+
@@ -685,14 +686,14 @@ function callPage(){
 let directory=[], memberFilter='', memberQuery='';
 function directoryPage(){
   const q=memberQuery.trim().toLowerCase();
-  const list=directory.filter(m=>(!memberFilter||m.role===memberFilter)&&(!q||m.name.toLowerCase().includes(q)));
+  const list=directory.filter(m=>(!memberFilter||(memberFilter==='organizer'?m.role==='organizer':m.title===memberFilter))&&(!q||(m.name+' '+m.medium+' '+m.title).toLowerCase().includes(q)));
   const since=directory.reduce((y,m)=>Math.min(y,new Date(m.since).getFullYear()),new Date().getFullYear());
-  const rows=list.map((m,i)=>'<div class="n-person big">'+avatar(m.name,i)+'<span><strong>'+esc(m.name)+(m.me?' (you)':'')+'</strong><small>Member since '+new Date(m.since).getFullYear()+'</small></span>'+(m.role==='organizer'?'<span class="eyebrow lime">Organizer</span>':'<span></span>')+'</div>').join('');
+  const rows=list.map((m,i)=>'<div class="n-person big">'+avatar(m.name,i)+'<span><strong>'+esc(m.name)+(m.me?' (you)':'')+'</strong><small>'+esc(m.medium||'Member since '+new Date(m.since).getFullYear())+'</small></span><span class="n-tags">'+(m.title?'<span class="eyebrow lime">'+esc(m.title)+'</span>':'')+(m.role==='organizer'?'<span class="eyebrow">Organizer</span>':'')+'</span></div>').join('');
   const box=document.querySelector('#n-dir');
   if(box){box.innerHTML=rows||'<p class="w-none">Nobody matches.</p>';return;}
   nightPage(backRow('#settings','You',directory.length+' members')+titleBlock('The','group',['SINCE',String(since),'EST.'])+
-    '<div class="n-search"><label><span class="sr">Find someone</span><input id="n-q" type="search" placeholder="Find someone" value="'+esc(memberQuery)+'"></label></div>'+
-    '<div class="n-chips">'+[['','All'],['organizer','Organizers']].map(([k,l])=>'<button type="button" class="'+(memberFilter===k?'on':'')+'" data-action="n-mfilter" data-role="'+k+'">'+l+'</button>').join('')+'</div>'+
+    '<div class="n-search"><label><span class="sr">Find someone</span><input id="n-q" type="search" placeholder="Find someone or a technique" value="'+esc(memberQuery)+'"></label></div>'+
+    '<div class="n-chips">'+[['','All'],...[...new Set(directory.map(m=>m.title).filter(Boolean))].map(t=>[t,t]),['organizer','Organizers']].map(([k,l])=>'<button type="button" class="'+(memberFilter===k?'on':'')+'" data-action="n-mfilter" data-role="'+k+'">'+l+'</button>').join('')+'</div>'+
     '<div id="n-dir" class="n-rule">'+(rows||'<p class="w-none">Nobody matches.</p>')+'</div>');
 }
 function settingsPage(){
@@ -707,14 +708,15 @@ function settingsPage(){
   const value=me.emails==='none'?'none':me.digest;
   const opt=(v,l,dsc)=>'<label class="n-switch"><span><strong>'+l+'</strong><small>'+dsc+'</small></span><input type="radio" name="email" value="'+v+'"'+(value===v?' checked':'')+'><i></i></label>';
   nightPage(backRow(organizer()?'#me':'/','Wall','')+
-    '<div class="n-poster lime n-profile"><span class="tape"></span><span class="n-av purple huge">'+esc(initials(me))+'</span><span><span class="w-title">'+esc(me.name||me.email.split('@')[0])+'</span><em class="n-org">'+(me.role==='organizer'?'Organizer':'Member')+'</em><span class="eyebrow">'+esc(me.email)+'</span></span></div>'+
+    '<div class="n-poster lime n-profile"><span class="tape"></span><span class="n-av purple huge">'+esc(initials(me))+'</span><span><span class="w-title">'+esc(me.name||me.email.split('@')[0])+'</span><em class="n-org">'+esc(me.medium||(me.role==='organizer'?'Organizer':'Member'))+'</em><span class="eyebrow">'+esc([me.title,me.role==='organizer'&&me.medium?'Organizer':'','Member since '+new Date(me.since||Date.now()).getFullYear()].filter(Boolean).join(' · '))+'</span><span class="eyebrow">'+esc(me.email)+'</span></span></div>'+
     sectionHead('You’re down for',down.length+(down.length===1?' thing':' things'))+
     (down.length?down.map(x=>'<a class="n-row" href="'+x.h+'"><span class="n-day"><b>'+(x.d?pad2(x.d.getDate()):'—')+'</b><span class="lime">'+(x.d?esc(monShort(x.d)):'Any')+'</span></span><span class="n-rowmain"><span class="eyebrow lime">'+esc(x.k)+'</span>'+esc(x.t)+'</span></a>').join(''):'<p class="w-none">Nothing yet. Answer a few things on the wall.</p>')+
     '<a class="n-row" href="#group"><span class="n-rowmain">Members directory<small>Who’s in the group</small></span><span class="lime">→</span></a>'+
     '<form data-form="profile">'+sectionHead('Email me')+'<fieldset class="n-fs"><legend class="sr">Email</legend>'+
       opt('instant','Everything right away','Each post and reply as it happens')+opt('daily','Daily summary','One email a day with what’s new')+opt('weekly','Weekly summary','One email on Mondays')+opt('none','Off','No emails at all, not even invitations')+
     '</fieldset><p class="n-hint">Meeting invitations, agendas and reminders always come right away unless email is off.</p>'+
-    sectionHead('Your name')+'<div class="n-search"><label><span class="sr">Name</span><input name="name" maxlength="80" value="'+esc(me.name)+'"></label></div><div class="n-pad"><button class="n-btn on">Save</button></div></form>'+
+    sectionHead('Your name')+'<div class="n-search"><label><span class="sr">Name</span><input name="name" maxlength="80" value="'+esc(me.name)+'"></label></div>'+
+    sectionHead('Your medium')+'<div class="n-search"><label><span class="sr">Medium</span><input name="medium" maxlength="80" value="'+esc(me.medium||'')+'" placeholder="Relief, woodcut"></label></div><div class="n-pad"><button class="n-btn on">Save</button></div></form>'+
     '<div class="n-panels">'+installPanel()+calendarPanel()+'</div>'+
     '<div class="n-pad"><button type="button" class="n-signout" data-action="signout">Sign out</button></div>');
 }
@@ -981,7 +983,7 @@ root.addEventListener('submit',ev=>{
       case 'code': await groupApi('code',{email:fields.email,code:fields.code}); location.reload(); return;
       case 'join': result=await groupApi('join',fields); form.reset(); tell(result.notice); return;
       case 'setup': await groupApi('setup',fields); location.href='/'; return;
-      case 'profile': await groupApi('profile',{name:fields.name,emails:fields.email==='none'?'none':'all',digest:fields.email==='none'?undefined:fields.email}); await refresh(); tell('Settings saved.'); return;
+      case 'profile': await groupApi('profile',{name:fields.name,medium:fields.medium,emails:fields.email==='none'?'none':'all',digest:fields.email==='none'?undefined:fields.email}); await refresh(); tell('Settings saved.'); return;
       case 'add-members': result=await groupApi('add',{people:fields.people,role:data.has('organizer')?'organizer':'member'}); await refresh(); tell(result.notice); return;
       case 'promote': result=await groupApi('role',{member:fields.member,role:'organizer'}); await refresh(); tell(result.notice); return;
       case 'features': await groupApi('features',fields); await refresh(); tell('Saved. Members see the change right away.'); return;
@@ -1038,6 +1040,7 @@ root.addEventListener('click',ev=>{
     if(action==='event-announce'||action==='event-help'){const r=await eventsApi(action==='event-announce'?'announce':'help',{event:route.id});await refresh();tell(r.notice);return;}
     if(action==='install'){if(installPrompt){installPrompt.prompt();installPrompt=null;}return;}
     if(action==='install-dismiss'){try{localStorage.setItem('tp-install','no');}catch{}button.closest('section')?.remove();return;}
+    if(action==='member-title'){const t=prompt('Role shown in the member directory (like Committee or Treasurer). Leave empty to clear.',d.title||'');if(t===null)return;await groupApi('title',{member:d.member,title:t});await refresh();tell(t.trim()?'Role saved.':'Role cleared.');return;}
     if(action==='call-filter'){callFilter=d.kind;callsPage();return;}
     if(action==='interest'){await callsApi('interest',{call:d.call||route.id,status:d.status});await refresh();tell(d.status==='none'?'Cleared.':'Saved: '+interestLabels[d.status]+'.');return;}
     if(action==='call-hide'){await callsApi('hide',{call:route.id,hidden:d.hidden==='true'});await refresh();tell('Saved.');return;}

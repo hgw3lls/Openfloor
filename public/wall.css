@@ -392,3 +392,4 @@ body .night-page .n-search input,.night-page form input:not([type=radio]):not([t
 .n-pform .row{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
 .night-page .n-pform select{border-color:var(--ink)!important;color:var(--ink)!important;background:var(--paper-2)!important}
 .n-pform input{text-transform:none!important;font:600 16px Geist,system-ui!important}
+.n-tags{display:flex;flex-direction:column;align-items:flex-end;gap:4px;text-align:right}
