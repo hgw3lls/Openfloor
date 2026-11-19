@@ -7,7 +7,8 @@ const route={page:'home'};
 if(isId(parts[0])){route.page='meeting';route.id=parts[0];if(parts[1]==='manage')route.manage=true;else if(parts[1]==='view')route.view=true;else if(isId(parts[1])){route.secret=parts[1];route.manage=true;}}
 else if(parts[0]==='event'&&isId(parts[1])){route.page='event';route.id=parts[1];route.manage=parts[2]==='manage';route.view=parts[2]==='view';}
 else if(parts[0]==='post'&&isId(parts[1])){route.page='post';route.id=parts[1];}
-else if(['organize','members','decisions','events','me'].includes(parts[0]))route.page=parts[0];
+else if(parts[0]==='call'&&isId(parts[1])){route.page='call';route.id=parts[1];}
+else if(['organize','members','decisions','events','me','calls'].includes(parts[0]))route.page=parts[0];
 
 const categories=['Discussion','Decision','Update'];
 const repeatLabels={'':'Does not repeat',weekly:'Every week',biweekly:'Every two weeks',monthly:'Every month (same weekday)'};
@@ -25,7 +26,7 @@ const dueText=d=>d?new Date(d+'T12:00:00Z').toLocaleDateString(undefined,{timeZo
 const overdue=a=>a.status==='open'&&a.due&&a.due<new Date().toISOString().slice(0,10);
 const ago=ms=>{const m=Math.round((Date.now()-ms)/60000);return m<1?'just now':m<60?m+' min ago':m<1440?Math.round(m/60)+' h ago':new Date(ms).toLocaleDateString(undefined,{month:'short',day:'numeric'});};
 
-let group, meeting, event, eventKinds=[], post, postList=[], eventList={upcoming:[],past:[]}, decisionsData=[], draft=[], editing='';
+let call, callList={open:[],closed:[]}, callKinds=[], callFilter='', group, meeting, event, eventKinds=[], post, postList=[], eventList={upcoming:[],past:[]}, decisionsData=[], draft=[], editing='';
 
 /* Preview as member: organizers see pages exactly as members do. */
 let preview=false;
@@ -34,7 +35,7 @@ const setPreview=on=>{try{on?localStorage.setItem('tp-preview','1'):localStorage
 const realOrganizer=()=>group?.me?.role==='organizer';
 const organizer=()=>realOrganizer()&&!preview;
 
-async function call(path,params,payload){
+async function request(path,params,payload){
   const headers={};
   if(route.secret&&path==='/api/meeting')headers.Authorization='Bearer '+route.secret;
   if(payload!==undefined)headers['Content-Type']='application/json';
@@ -43,10 +44,11 @@ async function call(path,params,payload){
   if(!response.ok)throw Error(data.error);
   return data;
 }
-const api=(action='',payload,meetingId=route.id)=>call('/api/meeting',{meeting:meetingId||'',action},payload);
-const groupApi=(action='',payload,params={})=>call('/api/group',{action,...params},payload);
-const postsApi=(action='',payload,params={})=>call('/api/posts',{action,...params},payload);
-const eventsApi=(action='',payload,params={})=>call('/api/events',{action,...params},payload);
+const api=(action='',payload,meetingId=route.id)=>request('/api/meeting',{meeting:meetingId||'',action},payload);
+const groupApi=(action='',payload,params={})=>request('/api/group',{action,...params},payload);
+const postsApi=(action='',payload,params={})=>request('/api/posts',{action,...params},payload);
+const eventsApi=(action='',payload,params={})=>request('/api/events',{action,...params},payload);
+const callsApi=(action='',payload,params={})=>request('/api/calls',{action,...params},payload);
 
 function hero(title,subtitle,badge='',extra=''){
   return '<section class="hero">'+(badge?'<span class="mono phase">'+badge+'</span>':'')+'<h1>'+esc(title)+'</h1>'+(subtitle?'<p>'+esc(subtitle)+'</p>':'')+extra+'</section>';
@@ -56,7 +58,7 @@ function header(){
   if(!me){nav.innerHTML='<a href="/">Sign in</a>';banner.innerHTML='';return;}
   const link=(href,label,page)=>'<a href="'+href+'"'+(route.page===page?' class="on"':'')+'>'+label+'</a>';
   const home=organizer()?link('/','Organizer',route.page==='organize'?'organize':'home')+link('#me','Your page','me'):link('/','Meetings',route.page==='me'?'me':'home');
-  nav.innerHTML=home+link('#events','Events','events')+link('#decisions','Decisions','decisions')+
+  nav.innerHTML=home+link('#events','Events','events')+link('#calls','Calls','calls')+link('#decisions','Decisions','decisions')+
     '<span class="who">'+esc(me.name||me.email)+'</span>'+
     (realOrganizer()?'<button type="button" class="alt" data-action="preview">'+(preview?'Exit preview':'Preview as member')+'</button>':'');
   banner.innerHTML=preview?'You’re previewing the site as a regular member. <button type="button" data-action="preview">Exit preview</button>':'';
@@ -107,6 +109,7 @@ function dashboard(){
     (group.mySlots?.length?'<section class="panel"><h2>Your sign-ups</h2><ul class="subs">'+group.mySlots.map(s=>'<li><span><strong>'+esc(s.label)+'</strong> <span class="muted">'+esc(s.when)+' · <a href="#event/'+s.event+(organizer()?'/view':'')+'">'+esc(s.eventTitle)+'</a></span></span></li>').join('')+'</ul></section>':'')+
     '<section class="panel"><h2>Upcoming meetings</h2>'+(group.meetings.upcoming.length?group.meetings.upcoming.map(meetingCard).join(''):'<p class="muted">No meetings scheduled yet.</p>')+'</section>'+
     '<section class="panel"><h2>Coming up</h2>'+(group.comingUp?.length?group.comingUp.map(eventCard).join(''):'<p class="muted">No events yet.</p>')+'<p><a href="#events">All events, and add your own →</a></p></section>'+
+    '<section class="panel"><h2>Deadlines coming up</h2>'+(group.deadlines?.length?group.deadlines.map(callCard).join(''):'<p class="muted">No open calls yet.</p>')+'<p><a href="#calls">All open calls, and share one →</a></p></section>'+
     '<section class="panel"><h2>Posts</h2><p class="muted">Announcements, questions and news for the group. Everyone gets them by email and can reply from their inbox.</p>'+
       (postList.length?postList.map(p=>'<a class="card" href="#post/'+p.id+'"><strong>'+(p.pinned?'📌 ':'')+esc(p.title)+'</strong><span class="muted">'+esc(p.author)+' · '+ago(p.created)+(p.replies?' · '+p.replies+(p.replies===1?' reply':' replies'):'')+(p.hidden?' · hidden':'')+'</span>'+(p.excerpt?'<span>'+esc(p.excerpt)+(p.excerpt.length>=240?'…':'')+'</span>':'')+'</a>').join(''):'<p class="muted">No posts yet.</p>')+
       '<details class="draft"><summary>Write a post</summary><form data-form="post"><label>Title<input name="title" required maxlength="140"></label><label>Message<textarea name="body" maxlength="6000" rows="6"></textarea></label><button>Post to the group</button></form></details></section>'+
@@ -293,6 +296,42 @@ function eventManage(){
       '<button type="button" class="alt" data-action="event-delete">Delete this event</button></section>';
 }
 
+/* Open calls */
+const interestLabels={interested:'Interested',applying:'Applying',applied:'Applied'};
+const daysLeft=d=>Math.round((Date.parse(d+'T00:00:00Z')-Date.parse(new Date().toISOString().slice(0,10)+'T00:00:00Z'))/86400000);
+function callCard(c){
+  const left=daysLeft(c.deadline);
+  const soon=left<0?'closed':left===0?'due today':left===1?'1 day left':left+' days left';
+  return '<a class="card" href="#call/'+c.id+'"><span class="mono"><span class="tag">'+esc(c.kind)+'</span>'+(c.myStatus?'<span class="chip rsvp-yes">'+interestLabels[c.myStatus]+'</span>':'')+(left>=0&&left<=7?'<span class="chip todo">'+soon+'</span>':'')+(c.hidden?'<span>hidden</span>':'')+'</span><strong>'+esc(c.title)+'</strong><span class="muted">'+esc([c.organization,'Deadline '+dueText(c.deadline)+(left>7?' ('+soon+')':''),c.award].filter(Boolean).join(' · '))+(c.applying?' · '+c.applying+' from the group applying':'')+'</span></a>';
+}
+function callFields(c={}){
+  return '<label>Name<input name="title" required maxlength="160" value="'+esc(c.title||'')+'" placeholder="Spring printmaking residency"></label>'+
+    '<div class="row"><label>Type<select name="kind">'+callKinds.map(k=>'<option'+((c.kind||'Other')===k?' selected':'')+'>'+k+'</option>').join('')+'</select></label><label>Deadline<input type="date" name="deadline" required value="'+esc(c.deadline||'')+'"></label></div>'+
+    '<div class="row"><label>Offered by<input name="organization" maxlength="160" value="'+esc(c.organization||'')+'" placeholder="Arts council, gallery…"></label><label>Fee or award <small>(optional)</small><input name="award" maxlength="160" value="'+esc(c.award||'')+'" placeholder="$2,000 · free to apply"></label></div>'+
+    '<label>Link<input name="link" maxlength="500" value="'+esc(c.link||'')+'" placeholder="https://"></label><label>Details<textarea name="details" maxlength="5000">'+esc(c.details||'')+'</textarea></label>';
+}
+function callsPage(){
+  const kinds=[...new Set(callList.open.map(c=>c.kind))];
+  const shown=callList.open.filter(c=>!callFilter||c.kind===callFilter);
+  root.innerHTML=hero('Open calls','Grants, residencies, exhibitions and competitions. Share what you find, and see who else is applying.')+
+    (kinds.length>1?'<div class="actions">'+['',...kinds].map(k=>'<button type="button" class="'+(callFilter===k?'':'alt ')+'small" data-action="call-filter" data-kind="'+esc(k)+'">'+(k||'All')+'</button>').join('')+'</div>':'')+
+    '<section class="panel"><h2>Open</h2>'+(shown.length?shown.map(callCard).join(''):'<p class="muted">No open calls yet.</p>')+'</section>'+
+    '<details class="panel"><summary>Share an open call</summary><form data-form="call-create">'+callFields()+'<button>Share with the group</button></form></details>'+
+    (callList.closed.length?'<details class="panel"><summary>Closed ('+callList.closed.length+')</summary>'+callList.closed.map(callCard).join('')+'</details>':'');
+}
+function callPage(){
+  const c=call, left=daysLeft(c.deadline);
+  const choose=s=>'<button type="button" class="'+(c.myStatus===s?'':'alt ')+'small" data-action="interest" data-status="'+s+'">'+interestLabels[s]+'</button>';
+  const people=Object.entries(c.people).filter(([,list])=>list.length).map(([s,list])=>'<p><strong>'+interestLabels[s]+' ('+list.length+'):</strong> '+esc(list.join(', '))+'</p>').join('');
+  root.innerHTML=hero(c.title,[c.organization,'Deadline '+dueText(c.deadline)+(c.closed?' (closed)':left===0?' (today)':' ('+left+(left===1?' day':' days')+' left)'),c.award].filter(Boolean).join(' · '),c.kind,
+      (c.link?'<p class="when"><a href="'+esc(c.link)+'" target="_blank" rel="noopener">'+esc(c.link)+'</a></p>':'')+'<p><a href="#calls">← All open calls</a></p>')+
+    (c.details?'<section class="panel"><div class="note">'+para(c.details)+'</div><p class="muted">Shared by '+esc(c.author||'a member')+'</p></section>':'')+
+    '<section class="panel"><h2>Are you applying?</h2>'+(c.closed?'<p class="muted">This call has closed.</p>':'<div class="actions">'+choose('interested')+choose('applying')+choose('applied')+(c.myStatus?'<button type="button" class="alt small" data-action="interest" data-status="none">Clear</button>':'')+'</div><p class="muted">Interested or applying gets you reminders a week and a day before the deadline.</p>')+(people||'<p class="muted">Nobody yet.</p>')+'</section>'+
+    '<section class="panel"><h2>Discussion</h2><p class="muted">Questions, tips, or finding people to apply with.</p>'+comments(c.comments,{kind:'call',target:c.id})+'</section>'+
+    (c.canEdit&&!preview?'<details class="panel admin"><summary>Edit this call</summary><form data-form="call-update">'+callFields(c)+'<button>Save</button></form></details>'+
+      '<section class="panel admin"><h2>Remove</h2><div class="actions">'+(organizer()?'<button type="button" class="alt" data-action="call-hide" data-hidden="'+!c.hidden+'">'+(c.hidden?'Show call':'Hide call')+'</button>':'')+'<button type="button" class="alt" data-action="call-delete">Delete this call</button></div></section>':'');
+}
+
 /* Posts and decisions */
 function postPage(){
   const p=post;
@@ -338,6 +377,8 @@ async function show(){
       if(manageEvent)eventManage();else eventView();
       return;
     }
+    case 'calls': {const r=await callsApi();callKinds=r.kinds;callList=preview?{open:r.open.filter(c=>!c.hidden),closed:r.closed.filter(c=>!c.hidden)}:r;callsPage();return;}
+    case 'call': {const r=await callsApi('',undefined,{call:route.id});callKinds=r.kinds;call=r.call;document.title=call.title+' · '+group.group;callPage();return;}
     case 'post': post=(await postsApi('',undefined,{post:route.id})).post; document.title=post.title+' · '+group.group; postPage(); return;
     case 'meeting': {
       meeting=asMember(await api());document.title=meeting.title+' · '+group.group;
@@ -406,6 +447,8 @@ root.addEventListener('submit',ev=>{
         if(kind==='event-create'){const created=await eventsApi('create',payload);location.hash='event/'+created.id+'/manage';return;}
         await eventsApi('update',{...payload,event:route.id}); await refresh(); tell('Saved.'); return;
       }
+      case 'call-create': {const created=await callsApi('create',fields);location.hash='call/'+created.id;return;}
+      case 'call-update': await callsApi('update',{...fields,call:route.id}); await refresh(); tell('Saved.'); return;
       case 'slot-add': await eventsApi('slot-add',{...fields,event:route.id}); await refresh(); tell('Slot added.'); return;
       case 'rsvp': result=await api('rsvp',{status:fields.status,reason:fields.reason}); break;
       case 'action-add': result=await api('action-add',fields); break;
@@ -445,13 +488,17 @@ root.addEventListener('click',ev=>{
     if(action==='remove-claim'){if(!confirm('Take this person off the slot?'))return;await eventsApi('remove-claim',{event:route.id,slot:d.slot,member:d.member});await refresh();tell('Removed.');return;}
     if(action==='slot-delete'){if(!confirm('Delete this slot and its sign-ups?'))return;await eventsApi('slot-delete',{event:route.id,slot:d.slot});await refresh();tell('Slot deleted.');return;}
     if(action==='event-announce'||action==='event-help'){const r=await eventsApi(action==='event-announce'?'announce':'help',{event:route.id});await refresh();tell(r.notice);return;}
+    if(action==='call-filter'){callFilter=d.kind;callsPage();return;}
+    if(action==='interest'){await callsApi('interest',{call:route.id,status:d.status});await refresh();tell(d.status==='none'?'Cleared.':'Saved: '+interestLabels[d.status]+'.');return;}
+    if(action==='call-hide'){await callsApi('hide',{call:route.id,hidden:d.hidden==='true'});await refresh();tell('Saved.');return;}
+    if(action==='call-delete'){if(!confirm('Delete “'+call.title+'” and its discussion? This can’t be undone.'))return;await callsApi('delete',{call:route.id});location.hash='calls';return;}
     if(action==='event-hide'){await eventsApi('hide',{event:route.id,hidden:d.hidden==='true'});await refresh();tell('Saved.');return;}
     if(action==='event-delete'){
       if(!confirm('Delete “'+event.title+'”? Its sign-up slots and discussion will be removed. This can’t be undone.'))return;
       await eventsApi('delete',{event:route.id,notify:!!document.querySelector('#notify-cancel')?.checked});location.hash='events';return;
     }
     if(action==='action-done'){
-      await call('/api/meeting',{meeting:d.meeting,action:'action-done'},{action:d.item,done:d.done==='true'});
+      await request('/api/meeting',{meeting:d.meeting,action:'action-done'},{action:d.item,done:d.done==='true'});
       await refresh(); tell(d.done==='true'?'Marked done.':'Reopened.'); return;
     }
     if(action==='action-delete'){if(!confirm('Delete this action item?'))return;await api('action-delete',{action:d.item});await refresh();tell('Deleted.');return;}
