@@ -243,7 +243,10 @@ function meetingManage(){
       '<form data-form="action-add" class="draft"><h3>Add an action item</h3><label>What needs to happen?<input name="title" required maxlength="200" placeholder="Book the gallery for March"></label><div class="row"><label>Who<select name="owner"><option value="">Nobody yet</option>'+(meeting.memberOptions||[]).map(m=>'<option value="'+m.id+'">'+esc(m.name)+'</option>').join('')+'</select></label><label>Due<input type="date" name="due"></label></div><button>Add action item</button><p class="muted">The owner gets an email, and reminders before it’s due.</p></form></section>'+
     (meeting.phase==='agenda'&&meeting.otherMeetings?.length?'<form data-form="carry" class="panel admin"><h2>Carry topics over</h2><p class="muted">Move topics that didn’t make this agenda to another meeting. Repeating meetings do this on their own.</p><label>To<select name="to">'+meeting.otherMeetings.map(m=>'<option value="'+m.id+'">'+esc(m.title)+(m.when?' · '+esc(m.when):'')+'</option>').join('')+'</select></label><button>Move unused topics</button></form>':'')+
     '<form data-form="schedule" class="panel admin"><h2>Meeting details</h2><label>Name<input name="title" maxlength="100" required value="'+esc(meeting.title)+'"></label>'+timeFields(meeting)+
-      '<label class="check"><input type="checkbox" name="notify" checked> Email members if the time changes</label><button>Save details</button></form>';
+      '<label class="check"><input type="checkbox" name="notify" checked> Email members if the time changes</label><button>Save details</button></form>'+
+    (organizer()?'<section class="panel admin"><h2>Delete meeting</h2><p class="muted">Removes the meeting with its topics, votes, RSVPs, action items and discussion. This can’t be undone.'+(meeting.repeat?' This meeting repeats: deleting it won’t bring it back, and if it’s the latest one the series stops.':'')+'</p>'+
+      (!meeting.past&&meeting.sent?.announced?'<label class="check"><input type="checkbox" id="notify-cancel" checked> Email members that it’s cancelled</label>':'')+
+      '<button type="button" class="alt" data-action="delete-meeting">Delete this meeting</button></section>':'');
   drawDraft();
 }
 
@@ -455,6 +458,11 @@ root.addEventListener('click',ev=>{
       await refresh(); tell(current===value?'Vote removed.':'Vote saved.'); return;
     }
     if(action==='nudge'){const r=await api('nudge',{});tell(r.notice);return;}
+    if(action==='delete-meeting'){
+      if(!confirm('Delete “'+meeting.title+'”? Its topics, votes, RSVPs, action items and discussion will be removed. This can’t be undone.'))return;
+      const r=await api('delete',{notify:!!document.querySelector('#notify-cancel')?.checked});
+      location.hash='';tell(r.notice);return;
+    }
     if(action==='mail-agenda'||action==='mail-outcomes'){const r=await api('email',{kind:action.slice(5)});tell(r.notice);return;}
     readDraft();
     if(action==='collect'||action==='phase-vote'){

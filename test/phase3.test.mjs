@@ -149,3 +149,43 @@ test('decisions record and outcomes email include action items', async () => {
   assert.equal(record[0].notes, 'We will apply for the city grant.');
   assert.equal(record[0].actions[0].title, 'Send the grant report');
 });
+
+test('deleting a meeting: organizers only, removes everything it owns, optional cancellation email, series not recreated', async () => {
+  const w = await world();
+  await w.ana.call('topic', {label: 'Budget'}, w.M);
+  const topic = (await w.org.get(w.M)).body.topics[0];
+  await w.ben.call('vote', {topic: topic.id, value: 1}, w.M);
+  await w.ben.call('rsvp', {status: 'yes'}, w.M);
+  await w.ben.posts('comment', {kind: 'meeting', target: w.M.meeting, body: 'See you there'});
+  await w.ben.posts('comment', {kind: 'topic', target: topic.id, body: 'Yes please'});
+  await w.org.call('action-add', {title: 'Book room', owner: w.a.id, due: day(5)}, w.M);
+  // An email for this meeting that hasn't gone out yet.
+  await w.pg.query("INSERT INTO outbox (id,meeting,recipient,message,created,updated) VALUES ('pending1',$1,'x@example.org','{}',1,1)", [w.M.meeting]);
+
+  assert.equal((await w.ana.call('delete', {}, w.M)).status, 403, 'members cannot delete');
+  const {secret} = (await w.pg.query('SELECT secret FROM meetings WHERE id=$1', [w.M.meeting])).rows[0];
+  assert.equal((await client(w.db, null).call('delete', {}, {...w.M, secret})).status, 403, 'old organizer links cannot delete');
+
+  w.mailer.outbox.length = 0;
+  const r = await w.org.call('delete', {notify: true}, w.M);
+  assert.equal(r.body.notice, 'Meeting deleted. Sending to 3 people.');
+  assert.ok(w.mailer.outbox.every(m => m.subject === 'Cancelled: March meeting'));
+  assert.equal(w.mailer.outbox.length, 3);
+  assert.equal((await w.org.get(w.M)).status, 404);
+  for (const [table, where] of [['topics', 'meeting'], ['ballots', 'meeting'], ['rsvps', 'meeting'], ['actions', 'meeting']]) {
+    assert.equal((await w.pg.query(`SELECT count(*)::int n FROM ${table} WHERE ${where}=$1`, [w.M.meeting])).rows[0].n, 0, table);
+  }
+  assert.equal((await w.pg.query("SELECT count(*)::int n FROM comments")).rows[0].n, 0);
+  assert.equal((await w.pg.query("SELECT count(*)::int n FROM reply_keys WHERE kind IN ('meeting','topic','action')")).rows[0].n, 0);
+  assert.equal((await w.pg.query("SELECT count(*)::int n FROM outbox WHERE id='pending1'")).rows[0].n, 0, 'its unsent emails are dropped');
+
+  // Without notify: no email. Deleting the next meeting of a series doesn't make the daily job recreate it.
+  const s = await w.org.call('', {title: 'Weekly crit', local: local(new Date(Date.now() + 86400000)), timezone: 'UTC', repeat: 'weekly'});
+  const start = Date.parse((await w.org.get({meeting: s.body.id})).body.startsAt);
+  await daily(w.db, w.mailer, ORIGIN, start + 3 * 3600000);
+  const next = (await w.pg.query('SELECT next_meeting FROM meetings WHERE id=$1', [s.body.id])).rows[0].next_meeting;
+  w.mailer.outbox.length = 0;
+  assert.equal((await w.org.call('delete', {}, {meeting: next})).body.notice, 'Meeting deleted.');
+  assert.equal(w.mailer.outbox.length, 0);
+  assert.equal((await daily(w.db, w.mailer, ORIGIN, start + 4 * 3600000)).created, 0, 'not recreated');
+});
