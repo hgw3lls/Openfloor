@@ -1,5 +1,5 @@
 /* Tower Press: member pages, a separate organizer panel, and "preview as member". */
-const root=document.querySelector('#app'), status=document.querySelector('#status'), nav=document.querySelector('#nav'), banner=document.querySelector('#banner');
+const root=document.querySelector('#app'), status=document.querySelector('#status'), nav=document.querySelector('#nav'), banner=document.querySelector('#banner'), tabs=document.querySelector('#tabs');
 const isId=v=>/^[a-f0-9-]{36}$/.test(v||'');
 const parts=location.hash.slice(1).split('/');
 const route={page:'home'};
@@ -8,7 +8,7 @@ if(isId(parts[0])){route.page='meeting';route.id=parts[0];if(parts[1]==='manage'
 else if(parts[0]==='event'&&isId(parts[1])){route.page='event';route.id=parts[1];route.manage=parts[2]==='manage';route.view=parts[2]==='view';}
 else if(parts[0]==='post'&&isId(parts[1])){route.page='post';route.id=parts[1];}
 else if(parts[0]==='call'&&isId(parts[1])){route.page='call';route.id=parts[1];}
-else if(['organize','members','decisions','events','me','calls'].includes(parts[0]))route.page=parts[0];
+else if(['organize','members','decisions','events','me','calls','meetings','board','settings','group'].includes(parts[0]))route.page=parts[0];
 
 const categories=['Discussion','Decision','Update'];
 const repeatLabels={'':'Does not repeat',weekly:'Every week',biweekly:'Every two weeks',monthly:'Every month (same weekday)'};
@@ -17,7 +17,8 @@ const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;
 const para=text=>esc(text).replace(/\n/g,'<br>');
 const trap='<label class="trap" aria-hidden="true">Leave this empty<input name="website" tabindex="-1" autocomplete="off"></label>';
 const options=selected=>categories.map(kind=>'<option'+(selected===kind?' selected':'')+'>'+kind+'</option>').join('');
-const tell=message=>status.textContent=message||'';
+let tellTimer;
+const tell=message=>{status.textContent=message||'';clearTimeout(tellTimer);if(message&&document.body.classList.contains('night'))tellTimer=setTimeout(()=>status.textContent='',4000);};
 const zone=()=>{try{return Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';}catch{return 'UTC';}};
 const zones=()=>{try{return Intl.supportedValuesOf('timeZone');}catch{return ['UTC'];}};
 const zoneSelect=selected=>{const list=zones();if(!list.includes(selected))list.unshift(selected);return '<select name="timezone">'+list.map(z=>'<option'+(z===selected?' selected':'')+'>'+esc(z)+'</option>').join('')+'</select>';};
@@ -47,7 +48,7 @@ async function request(path,params,payload){
   if(!response.ok)throw Error(data.error);
   return data;
 }
-const api=(action='',payload,meetingId=route.id)=>request('/api/meeting',{meeting:meetingId||'',action},payload);
+const api=(action='',payload,meetingId=route.id||meeting?.id)=>request('/api/meeting',{meeting:meetingId||'',action},payload);
 const groupApi=(action='',payload,params={})=>request('/api/group',{action,...params},payload);
 const postsApi=(action='',payload,params={})=>request('/api/posts',{action,...params},payload);
 const eventsApi=(action='',payload,params={})=>request('/api/events',{action,...params},payload);
@@ -58,12 +59,16 @@ function hero(title,subtitle,badge='',extra=''){
 }
 function header(){
   const me=group?.me;
-  if(!me){nav.innerHTML='<a href="/">Sign in</a>';banner.innerHTML='';return;}
-  const link=(href,label,page)=>'<a href="'+href+'"'+(route.page===page?' class="on"':'')+'>'+label+'</a>';
-  const home=organizer()?link('/','Organizer',route.page==='organize'?'organize':'home')+link('#me','Your page','me'):link('/','Meetings',route.page==='me'?'me':'home');
-  nav.innerHTML=home+(shown('events')?link('#events','Events','events'):'')+(shown('calls')?link('#calls','Calls','calls'):'')+link('#decisions','Decisions','decisions')+
+  if(!me){nav.innerHTML='<a href="/">Sign in</a>';banner.innerHTML='';tabs.innerHTML='';return;}
+  const link=(href,label,page,dup)=>'<a href="'+href+'" class="'+(route.page===page?'on':'')+(dup?' dup':'')+'">'+label+'</a>';
+  const wallHref=organizer()?'#me':'/', onWall=organizer()?route.page==='me':route.page==='home'||route.page==='me';
+  const home=(organizer()?link('/','Organizer',route.page==='organize'?'organize':'home'):'')+link(wallHref,'Wall',onWall?route.page:'-','dup')+link('#meetings','Meetings','meetings','dup');
+  nav.innerHTML=home+(shown('events')?link('#events','Events','events',1):'')+(shown('calls')?link('#calls','Calls','calls',1):'')+(shown('posts')?link('#board','Board','board'):'')+link('#decisions','Decisions','decisions')+
     '<span class="who">'+esc(me.name||me.email)+'</span>'+
     (realOrganizer()?'<button type="button" class="alt" data-action="preview">'+(preview?'Exit preview':'Preview as member')+'</button>':'');
+  const tab=(href,label,on)=>'<a href="'+href+'"'+(on?' class="on" aria-current="page"':'')+'>'+label+'</a>';
+  tabs.innerHTML=tab(wallHref,'Wall',onWall)+tab('#meetings','Meetings',route.page==='meetings'||route.page==='meeting')+(shown('events')?tab('#events','Events',route.page==='events'||route.page==='event'):'')+(shown('calls')?tab('#calls','Calls',route.page==='calls'||route.page==='call'):'');
+  tabs.style.gridTemplateColumns='repeat('+tabs.children.length+',1fr)';
   banner.innerHTML=preview?'You’re previewing the site as a regular member. <button type="button" data-action="preview">Exit preview</button>':'';
 }
 function orgbar(label,href){
@@ -87,15 +92,6 @@ function timeFields(m){
 }
 
 /* Signed out */
-function welcome(){
-  const setup='<form class="draft" data-form="setup"><label>Organizer key<input type="password" name="organizerKey" required autocomplete="off"></label><label>Your name<input name="name" maxlength="80" required></label><label>Your email<input type="email" name="email" required maxlength="254"></label><button>Set up and sign in</button></form>';
-  root.innerHTML=hero(group.group,'Meetings, events, agendas and decisions for the group, in one place.')+
-    (group.needsSetup?'<section class="panel admin"><h2>Set up the group</h2><p class="muted">No organizers yet. Enter the organizer key from Vercel to become the first organizer.</p>'+setup+'</section>':'')+
-    '<form class="panel" data-form="signin"><h2>Sign in</h2><p class="muted">Members get a sign-in link by email. No password needed.</p><label>Email<input type="email" name="email" required maxlength="254" autocomplete="email"></label><button>Email me a sign-in link</button></form>'+
-    '<form class="panel" data-form="join"><h2>Join the group</h2><p class="muted">Ask to join. An organizer will approve you, and you’ll get an email.</p><label>Name<input name="name" required maxlength="80" autocomplete="name"></label><label>Email<input type="email" name="email" required maxlength="254" autocomplete="email"></label>'+trap+'<button>Ask to join</button></form>'+
-    (group.needsSetup?'':'<details class="panel"><summary>Organizer key</summary><p class="muted">Lost access? The organizer key from Vercel signs you in as an organizer.</p>'+setup+'</details>');
-}
-
 /* Member dashboard */
 function meetingCard(m){
   const chip=m.mine?'<span class="chip rsvp-'+m.mine+'">'+rsvpLabels[m.mine]+'</span>':(m.past?'':'<span class="chip todo">RSVP needed</span>');
@@ -104,21 +100,6 @@ function meetingCard(m){
 function eventCard(e){
   const open=e.spots-e.taken;
   return '<a class="card" href="#event/'+e.id+(organizer()&&route.page!=='events'?'/view':'')+'"><span class="mono"><span class="tag">'+esc(e.kind)+'</span>'+(e.signedUp?'<span class="chip rsvp-yes">You’re helping</span>':'')+(open>0?'<span class="chip todo">'+open+(open===1?' spot':' spots')+' open</span>':'')+(e.hidden?'<span>hidden</span>':'')+'</span><strong>'+esc(e.title)+'</strong><span class="muted">'+esc(e.when)+(e.location?' · '+esc(e.location):'')+'</span></a>';
-}
-function dashboard(){
-  const me=group.me;
-  root.innerHTML=hero(group.group,'Hi'+(me.name?', '+me.name:'')+'.')+
-    orgbar('Back to the organizer panel','/')+
-    (group.myActions?.length?'<section class="panel"><h2>Your action items</h2><ul class="subs">'+group.myActions.map(a=>actionRow(a,{showMeeting:true,canDone:true})).join('')+'</ul></section>':'')+
-    (group.mySlots?.length?'<section class="panel"><h2>Your sign-ups</h2><ul class="subs">'+group.mySlots.map(s=>'<li><span><strong>'+esc(s.label)+'</strong> <span class="muted">'+esc(s.when)+' · <a href="#event/'+s.event+(organizer()?'/view':'')+'">'+esc(s.eventTitle)+'</a></span></span></li>').join('')+'</ul></section>':'')+
-    '<section class="panel"><h2>Upcoming meetings</h2>'+(group.meetings.upcoming.length?group.meetings.upcoming.map(meetingCard).join(''):'<p class="muted">No meetings scheduled yet.</p>')+'</section>'+
-    (shown('events')?'<section class="panel"><h2>Coming up</h2>'+(group.comingUp?.length?group.comingUp.map(eventCard).join(''):'<p class="muted">No events yet.</p>')+'<p><a href="#events">'+(can('events')?'All events, and add your own →':'All events →')+'</a></p></section>':'')+
-    (shown('calls')?'<section class="panel"><h2>Deadlines coming up</h2>'+(group.deadlines?.length?group.deadlines.map(callCard).join(''):'<p class="muted">No open calls yet.</p>')+'<p><a href="#calls">'+(can('calls')?'All open calls, and share one →':'All open calls →')+'</a></p></section>':'')+
-    (shown('posts')?'<section class="panel"><h2>Posts</h2><p class="muted">Announcements, questions and news for the group. Everyone gets them by email and can reply from their inbox.</p>'+
-      (postList.length?postList.map(p=>'<a class="card" href="#post/'+p.id+'"><strong>'+(p.pinned?'📌 ':'')+esc(p.title)+'</strong><span class="muted">'+esc(p.author)+' · '+ago(p.created)+(p.replies?' · '+p.replies+(p.replies===1?' reply':' replies'):'')+(p.hidden?' · hidden':'')+'</span>'+(p.excerpt?'<span>'+esc(p.excerpt)+(p.excerpt.length>=240?'…':'')+'</span>':'')+'</a>').join(''):'<p class="muted">No posts yet.</p>')+
-      (can('posts')?'<details class="draft"><summary>Write a post</summary><form data-form="post"><label>Title<input name="title" required maxlength="140"></label><label>Message<textarea name="body" maxlength="6000" rows="6"></textarea></label><button>Post to the group</button></form></details>':'')+'</section>':'')+
-    (group.meetings.past.length?'<section class="panel"><h2>Past meetings</h2>'+group.meetings.past.map(meetingCard).join('')+'</section>':'')+
-    installPanel()+calendarPanel()+settingsForm(me);
 }
 /* Save to the phone's home screen */
 let installPrompt=null;
@@ -232,18 +213,6 @@ function meetingHero(){
   const extra='<p class="when">'+(meeting.startsAt?'<a href="/api/calendar?meeting='+meeting.id+'">Add to calendar</a>':'')+(meeting.when&&meeting.schedule?' · '+esc(meeting.schedule):'')+(meeting.repeat?' · '+repeatLabels[meeting.repeat]:'')+'</p>';
   return hero(meeting.title,subtitle,{collect:'Topics and voting open',vote:'Final vote',agenda:'Agenda published'}[meeting.phase],extra);
 }
-function meetingView(){
-  const open=meeting.phase!=='agenda', list=meeting.actions||[];
-  root.innerHTML=meetingHero()+orgbar('Manage this meeting','#'+meeting.id)+
-    rsvpPanel()+
-    (meeting.phase==='agenda'?'<section class="panel"><h2>Agenda</h2><p class="mono">'+meeting.agenda.reduce((total,item)=>total+item.minutes,0)+' minutes</p>'+meeting.agenda.map(item=>'<div class="topic"><div class="mono"><span class="tag">'+esc(item.kind)+'</span>'+item.minutes+' min</div><strong>'+esc(item.label)+'</strong>'+(item.detail?'<p>'+para(item.detail)+'</p>':'')+'</div>').join('')+'</section>':'')+
-    (meeting.notes?'<section class="panel"><h2>Decisions and next steps</h2><div class="note">'+esc(meeting.notes)+'</div></section>':'')+
-    (list.length?'<section class="panel"><h2>Action items</h2><ul class="subs">'+list.map(a=>actionRow(a,{canDone:a.mine})).join('')+'</ul></section>':'')+
-    (meeting.phase==='collect'&&meeting.me&&can('topics')?'<form class="panel" data-form="topic"><h2>Suggest a topic</h2><p class="muted">What should we make time for? Members see your topic and vote on it; you can’t vote on your own.</p><label>Topic<input name="label" maxlength="120" required></label><label>What would you like to happen? <small>(optional)</small><textarea name="detail" maxlength="650"></textarea></label><label>Type<select name="kind">'+options('Discussion')+'</select></label>'+trap+'<button>Submit topic</button></form>':'')+
-    (open&&shown('topics')?'<section class="panel"><h2>Submitted topics</h2>'+(meeting.topics.length?(meeting.me&&can('topics')?'<p class="muted">Vote 👍 or 👎 on any topic. Tap again to take your vote back.</p>':'')+meeting.topics.map(t=>topicItem(t)).join(''):'<p class="muted">No topics yet.</p>')+'</section>':'')+
-    (meeting.me&&!shown('comments')?'':meeting.me?'<section class="panel"><h2>Discussion</h2><p class="muted">Questions and notes about this meeting. You can also reply to any meeting email.</p>'+comments(meeting.discussion||[],{kind:'meeting',target:meeting.id})+'</section>':joinPrompt());
-}
-
 /* Meetings: organizer page */
 function drawDraft(){
   const container=document.querySelector('#draft');
@@ -289,25 +258,11 @@ function eventFields(e={}){
     '<label>Place<input name="location" maxlength="200" value="'+esc(e.location||'')+'"></label><label>Link <small>(optional)</small><input name="link" maxlength="500" value="'+esc(e.link||'')+'" placeholder="https://"></label>'+
     '<label>Details<textarea name="description" maxlength="4000">'+esc(e.description||'')+'</textarea></label>';
 }
-function eventsPage(){
-  root.innerHTML=hero('Events','Shows, openings, workshops and workdays. Add your own, and sign up to help.')+
-    '<section class="panel"><h2>Coming up</h2>'+(eventList.upcoming.length?eventList.upcoming.map(eventCard).join(''):'<p class="muted">Nothing yet.</p>')+'</section>'+
-    (can('events')?'<details class="panel"><summary>Add an event</summary><form data-form="event-create">'+eventFields()+'<button>Add event</button><p class="muted">You can add sign-up slots, like gallery sitting or install crew, on the next page.</p></form></details>':'')+
-    (eventList.past.length?'<section class="panel"><h2>Past</h2>'+eventList.past.map(eventCard).join('')+'</section>':'');
-}
 function slotRow(s,{manage=false}={}){
   const full=s.taken>=s.capacity, people=s.people.map(p=>p.name);
   return '<div class="slot"><span><strong>'+esc(s.label)+'</strong>'+(s.when?'<br><span class="who">'+esc(s.when)+'</span>':'')+'<br><span class="who">'+s.taken+' of '+s.capacity+(people.length?': '+esc(people.join(', ')):'')+'</span></span><span class="actions">'+
     (manage?s.people.map(p=>'<button type="button" class="alt small" data-action="remove-claim" data-slot="'+s.id+'" data-member="'+p.id+'">Remove '+esc(p.name)+'</button>').join('')+'<button type="button" class="alt small" data-action="slot-delete" data-slot="'+s.id+'">Delete slot</button>':
       event.past||!can('signups')?'':s.mine?'<button type="button" class="alt small" data-action="unclaim" data-slot="'+s.id+'">Drop out</button>':full?'<span class="full">Full</span>':'<button type="button" class="small" data-action="claim" data-slot="'+s.id+'">Sign me up</button>')+'</span></div>';
-}
-function eventView(){
-  const e=event;
-  root.innerHTML=hero(e.title,e.when+(e.location?' · '+e.location:''),e.kind,e.link?'<p class="when"><a href="'+esc(e.link)+'" target="_blank" rel="noopener">'+esc(e.link)+'</a></p>':'')+
-    (e.canEdit&&!preview?'<div class="orgbar"><strong>'+(organizer()?'Organizer':'Your event')+'</strong><a class="button" href="#event/'+e.id+(organizer()?'':'/manage')+'">Manage this event</a></div>':'')+
-    (e.description?'<section class="panel"><div class="note">'+para(e.description)+'</div><p class="muted">Added by '+esc(e.author||'a member')+'</p></section>':'')+
-    (e.slots.length&&shown('signups')?'<section class="panel"><h2>Help needed</h2><p class="muted">'+(can('signups')?'Sign up for a slot. You’ll get a reminder the day before.':'Who’s helping.')+'</p>'+e.slots.map(s=>slotRow(s)).join('')+'</section>':'')+
-    (shown('comments')?'<section class="panel"><h2>Discussion</h2>'+comments(e.comments,{kind:'event',target:e.id})+'</section>':'');
 }
 function eventManage(){
   const e=event;
@@ -336,49 +291,7 @@ function callFields(c={}){
     '<div class="row"><label>Offered by<input name="organization" maxlength="160" value="'+esc(c.organization||'')+'" placeholder="Arts council, gallery…"></label><label>Fee or award <small>(optional)</small><input name="award" maxlength="160" value="'+esc(c.award||'')+'" placeholder="$2,000 · free to apply"></label></div>'+
     '<label>Link<input name="link" maxlength="500" value="'+esc(c.link||'')+'" placeholder="https://"></label><label>Details<textarea name="details" maxlength="5000">'+esc(c.details||'')+'</textarea></label>';
 }
-function callsPage(){
-  const kinds=[...new Set(callList.open.map(c=>c.kind))];
-  const shown=callList.open.filter(c=>!callFilter||c.kind===callFilter);
-  root.innerHTML=hero('Open calls','Grants, residencies, exhibitions and competitions. Share what you find, and see who else is applying.')+
-    (kinds.length>1?'<div class="actions">'+['',...kinds].map(k=>'<button type="button" class="'+(callFilter===k?'':'alt ')+'small" data-action="call-filter" data-kind="'+esc(k)+'">'+(k||'All')+'</button>').join('')+'</div>':'')+
-    '<section class="panel"><h2>Open</h2>'+(shown.length?shown.map(callCard).join(''):'<p class="muted">No open calls yet.</p>')+'</section>'+
-    (can('calls')?'<details class="panel"><summary>Share an open call</summary><form data-form="call-create">'+callFields()+'<button>Share with the group</button></form></details>':'')+
-    (callList.closed.length?'<details class="panel"><summary>Closed ('+callList.closed.length+')</summary>'+callList.closed.map(callCard).join('')+'</details>':'');
-}
-function callPage(){
-  const c=call, left=daysLeft(c.deadline);
-  const choose=s=>'<button type="button" class="'+(c.myStatus===s?'':'alt ')+'small" data-action="interest" data-status="'+s+'">'+interestLabels[s]+'</button>';
-  const people=Object.entries(c.people).filter(([,list])=>list.length).map(([s,list])=>'<p><strong>'+interestLabels[s]+' ('+list.length+'):</strong> '+esc(list.join(', '))+'</p>').join('');
-  root.innerHTML=hero(c.title,[c.organization,'Deadline '+dueText(c.deadline)+(c.closed?' (closed)':left===0?' (today)':' ('+left+(left===1?' day':' days')+' left)'),c.award].filter(Boolean).join(' · '),c.kind,
-      (c.link?'<p class="when"><a href="'+esc(c.link)+'" target="_blank" rel="noopener">'+esc(c.link)+'</a></p>':'')+'<p><a href="#calls">← All open calls</a></p>')+
-    (c.details?'<section class="panel"><div class="note">'+para(c.details)+'</div><p class="muted">Shared by '+esc(c.author||'a member')+'</p></section>':'')+
-    '<section class="panel"><h2>'+(can('calls')?'Are you applying?':'Who’s applying')+'</h2>'+(!can('calls')?'':c.closed?'<p class="muted">This call has closed.</p>':'<div class="actions">'+choose('interested')+choose('applying')+choose('applied')+(c.myStatus?'<button type="button" class="alt small" data-action="interest" data-status="none">Clear</button>':'')+'</div><p class="muted">Interested or applying gets you reminders a week and a day before the deadline.</p>')+(people||'<p class="muted">Nobody yet.</p>')+'</section>'+
-    (shown('comments')?'<section class="panel"><h2>Discussion</h2><p class="muted">Questions, tips, or finding people to apply with.</p>'+comments(c.comments,{kind:'call',target:c.id})+'</section>':'')+
-    (c.canEdit&&!preview?'<details class="panel admin"><summary>Edit this call</summary><form data-form="call-update">'+callFields(c)+'<button>Save</button></form></details>'+
-      '<section class="panel admin"><h2>Remove</h2><div class="actions">'+(organizer()?'<button type="button" class="alt" data-action="call-hide" data-hidden="'+!c.hidden+'">'+(c.hidden?'Show call':'Hide call')+'</button>':'')+'<button type="button" class="alt" data-action="call-delete">Delete this call</button></div></section>':'');
-}
-
 /* Posts and decisions */
-function postPage(){
-  const p=post;
-  root.innerHTML=hero(p.title,p.author+' · '+ago(p.created)+(p.hidden?' · hidden':''),p.pinned?'Pinned':'','<p><a href="/">← Back</a></p>')+
-    (p.body?'<section class="panel"><div class="note">'+para(p.body)+'</div></section>':'')+
-    (shown('comments')?'<section class="panel"><h2>Replies</h2>'+comments(p.comments,{kind:'post',target:p.id})+'</section>':'')+
-    ((organizer()||p.mine)?'<section class="panel admin"><div class="actions">'+(organizer()?'<button type="button" class="alt" data-action="pin-post" data-pinned="'+!p.pinned+'">'+(p.pinned?'Unpin':'Pin to top')+'</button><button type="button" class="alt" data-action="hide-post" data-hidden="'+!p.hidden+'">'+(p.hidden?'Show':'Hide')+'</button>':'')+'<button type="button" class="alt" data-action="delete-post">Delete post</button></div></section>':'');
-}
-function decisionsPage(){
-  const q=(document.querySelector('#search')?.value||'').trim().toLowerCase();
-  const match=m=>!q||JSON.stringify([m.title,m.notes,m.agenda.map(a=>a.label+' '+a.detail),m.actions.map(a=>a.title+' '+a.ownerName)]).toLowerCase().includes(q);
-  const html=decisionsData.filter(match).map(m=>'<section class="panel"><p class="mono">'+esc(m.startsAt?new Date(m.startsAt).toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric',timeZone:m.timezone}):m.schedule||'')+'</p><h2><a href="#'+m.id+'">'+esc(m.title)+'</a></h2>'+
-    (m.agenda.length?'<h3>Agenda</h3><ol>'+m.agenda.map(a=>'<li>'+esc(a.label)+'</li>').join('')+'</ol>':'')+
-    (m.notes?'<h3>Decisions and next steps</h3><div class="note">'+esc(m.notes)+'</div>':'')+
-    (m.actions.length?'<h3>Action items</h3><ul class="subs">'+m.actions.map(a=>actionRow(a)).join('')+'</ul>':'')+'</section>').join('');
-  const results=document.querySelector('#results');
-  if(results){results.innerHTML=html||'<p class="muted">Nothing matches.</p>';return;}
-  root.innerHTML=hero('Decisions','Past meetings: agendas, decisions and action items.')+
-    '<label class="panel">Search<input id="search" type="search" placeholder="Search decisions, topics, people…"></label><div id="results">'+(html||'<p class="muted">No past meetings yet.</p>')+'</div>';
-}
-
 /* Loading and showing the current page */
 function asMember(m){
   // What a regular member would get for this meeting.
@@ -387,7 +300,515 @@ function asMember(m){
   return {...m,admin:false,topics:m.topics.filter(t=>!t.hidden).map(t=>counts?t:{...t,up:null,down:null,votes:null}),
     attendance:{going:m.attendance.going,maybe:m.attendance.maybe}};
 }
+/* The wall: the member home screen ("Night index"). A — Needs you, B — Pinned, C — Index. */
+let wallDeck=[], wallAt=0, wallReason=false, wallSheet=null, wallDone=new Set();
+let wallMine=false;try{wallMine=localStorage.getItem('tp-mine')==='1';}catch{}
+const dismissed=()=>{try{return JSON.parse(localStorage.getItem('tp-dismissed')||'[]');}catch{return [];}};
+const dismiss=key=>{try{localStorage.setItem('tp-dismissed',JSON.stringify([...dismissed(),key].slice(-200)));}catch{}};
+const pad2=n=>String(n).padStart(2,'0');
+const dayKey=d=>d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());
+const dowShort=d=>d.toLocaleDateString('en-GB',{weekday:'short'});
+const monShort=d=>d.toLocaleDateString('en-GB',{month:'short'});
+const clock=d=>d.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'});
+const deadlineDate=s=>new Date(s+'T12:00:00');
+const daysUntil=s=>Math.round((Date.parse(s+'T00:00:00Z')-Date.parse(new Date().toISOString().slice(0,10)+'T00:00:00Z'))/86400000);
+const initials=me=>(me.name||me.email).split(/[\s@._-]+/).filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join('')||'?';
+function isoWeek(d){const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));const day=t.getUTCDay()||7;t.setUTCDate(t.getUTCDate()+4-day);const y=new Date(Date.UTC(t.getUTCFullYear(),0,1));return Math.ceil(((t-y)/86400000+1)/7);}
+const peopleText=s=>s.people.length?esc(s.people.join(', '))+' · '+s.people.length+' of '+s.capacity:'Nobody yet · 0 of '+s.capacity;
+
+// A — the decisions waiting for this member, in a fixed order for this visit.
+function buildDeck(){
+  const skip=new Set(dismissed()), deck=[];
+  for(const m of group.meetings.upcoming.filter(m=>!m.mine&&m.startsAt))
+    deck.push({key:'m:'+m.id,type:'rsvp',id:m.id,kind:'Meeting · '+dueLike(m.startsAt),title:m.title,
+      detail:[clock(new Date(m.startsAt))+(m.location?' at '+m.location:''),m.going+' going'+(m.topics?', '+m.topics+(m.topics===1?' topic':' topics')+' on the table':'')].join('. ')+'.',
+      choices:[['yes','Going'],['maybe','Maybe'],['no','Can’t make it']]});
+  const topics=group.topics||[];
+  topics.forEach((t,i)=>deck.push({key:'t:'+t.id,type:'vote',id:t.id,meeting:t.meeting,kind:'Topic vote · '+(i+1)+' of '+topics.length,title:t.label,
+    detail:(t.detail?t.detail+' ':'')+'For '+t.meetingTitle+'. Make time for it?',choices:[['1','Yes, discuss'],['-1','Not now']]}));
+  if(can('signups'))for(const s of (group.slots||[]).filter(s=>!s.mine&&s.people.length<s.capacity&&!skip.has('s:'+s.id)).slice(0,3)){
+    const need=s.capacity-s.people.length;
+    deck.push({key:'s:'+s.id,type:'slot',id:s.id,kind:'Help wanted · '+dueLike(s.startsAt),title:s.label+' · '+s.eventTitle,
+      detail:(s.timed?s.when+'. ':'')+(s.people.length?s.people.join(', ')+' signed up, '+need+' more needed.':'Nobody yet, '+need+' needed.'),choices:[['claim','Sign me up'],['skip','Not this time']]});
+  }
+  if(can('calls'))for(const c of (group.openCalls||[]).filter(c=>!c.myStatus&&!skip.has('c:'+c.id)).slice(0,3)){
+    const left=daysUntil(c.deadline);
+    deck.push({key:'c:'+c.id,type:'call',id:c.id,kind:'Open call · '+(left===0?'due today':left===1?'1 day left':left+' days left'),title:c.title,
+      detail:[c.organization,c.award].filter(Boolean).join(', ')+(c.organization||c.award?'. ':'')+(c.applying?c.applying+' from the group applying.':'Nobody from the group is on it yet.'),
+      choices:[['interested','I’m interested'],['skip','Not for me']]});
+  }
+  return deck;
+}
+const dueLike=iso=>{const d=new Date(iso);return dowShort(d)+' '+d.getDate()+' '+monShort(d);};
+
+function deckHtml(){
+  const n=wallDeck.length, left=Math.max(0,n-wallAt);
+  const bars=n?'<div class="w-bars" style="grid-template-columns:repeat('+n+',1fr)">'+wallDeck.map((_,i)=>'<span class="'+(i<wallAt?'done':i===wallAt?'now':'')+'"></span>').join('')+'</div>':'';
+  const head='<div class="w-label"><span>A — Needs you</span><span class="lime">'+(left?left+' waiting for you':'Done for now')+'</span></div>'+bars;
+  if(!left)return head+'<div class="w-empty"><span>All caught up.</span><button type="button" data-action="w-redo">Redo</button></div>';
+  const c=wallDeck[wallAt];
+  const body=wallReason
+    ?'<form class="w-reason" data-form="w-reason"><label>Why can’t you make it? <small>(only organizers see this)</small><textarea name="reason" required maxlength="500" rows="2"></textarea></label><div class="w-choices"><button class="fill">Send</button><button type="button" data-action="w-reason-cancel">Cancel</button></div></form>'
+    :'<div class="w-choices">'+c.choices.map(([v,l],i)=>'<button type="button" class="'+(i===0?'fill':'')+'" data-action="w-choose" data-value="'+v+'">'+esc(l)+'</button>').join('')+'</div>';
+  return head+'<div class="w-deck"><div class="w-behind"></div><div class="w-card" id="w-card"><span class="tape"></span><span class="eyebrow">'+esc(c.kind)+'</span><span class="w-title">'+esc(c.title)+'</span><span class="w-detail">'+esc(c.detail)+'</span>'+body+
+    '<div class="w-nav"><button type="button" data-action="w-back"'+(wallAt?'':' class="dim"')+'>← Back</button><button type="button" class="purple" data-action="w-skip">Skip →</button></div></div></div>';
+}
+
+function pinnedHtml(){
+  const m=group.meetings.upcoming.find(x=>x.startsAt), e=shown('events')?(group.upcomingEvents||[])[0]:null;
+  const meetPoster=m?(()=>{const d=new Date(m.startsAt);return '<button type="button" class="w-poster meet" data-action="w-sheet" data-sheet="meet"><span class="tape"></span><span class="eyebrow lime">01 — Meeting</span><span class="num">'+pad2(d.getDate())+'<i>.</i>'+pad2(d.getMonth()+1)+'</span><span class="day">'+esc(dowShort(d)+' '+clock(d))+'</span><span class="chip">'+(m.mine?'You: '+rsvpLabels[m.mine]:'Tap to RSVP')+'</span></button>';})()
+    :'<a class="w-poster meet" href="#meetings"><span class="eyebrow lime">01 — Meeting</span><span class="day">No meeting scheduled yet.</span></a>';
+  let showPoster='';
+  if(e){
+    const words=e.title.split(/\s+/), last=words.pop();
+    const slots=(group.slots||[]).filter(s=>s.event===e.id), mineS=slots.find(s=>s.mine), open=slots.find(s=>s.people.length<s.capacity);
+    const state=mineS?'You: '+mineS.label:open?(open.people.length?esc(open.people.join(', '))+' · '+open.people.length+' of '+open.capacity:esc(open.label)+' · help wanted'):esc(e.when);
+    showPoster='<button type="button" class="w-poster show" data-action="w-sheet" data-sheet="show"><span class="dot"></span><span class="eyebrow">02 — '+esc(e.kind)+'</span><span class="big">'+esc(words.join(' '))+(words.length?' ':'')+'<em>'+esc(last)+'</em></span><span class="state">'+state+'</span></button>';
+  }else if(shown('events'))showPoster='<a class="w-poster show" href="#events"><span class="dot"></span><span class="eyebrow">02 — Events</span><span class="big">Nothing <em>yet</em></span><span class="state">'+(can('events')?'Add an event →':'See events →')+'</span></a>';
+  return '<div class="w-label pad">B — Pinned</div><div class="w-pinned">'+meetPoster+showPoster+'</div>';
+}
+
+function indexItems(){
+  const items=[];
+  for(const m of group.meetings.upcoming){
+    if(!m.startsAt)continue;
+    const d=new Date(m.startsAt);
+    items.push({date:d,kind:'Meeting',title:m.title,href:'#'+m.id+(organizer()?'/view':''),meta:[clock(d),m.location,m.going+' going'].filter(Boolean).join(' · '),mine:!!m.mine&&m.mine!=='no',
+      act:m.mine?'You: '+rsvpLabels[m.mine]:'I’m going',on:!!m.mine,action:m.mine?'w-sheet':'w-rsvp',data:m.mine?{sheet:'meet',meeting:m.id}:{meeting:m.id}});
+  }
+  if(shown('events'))for(const e of group.upcomingEvents||[]){
+    const d=new Date(e.startsAt);
+    items.push({date:d,kind:e.kind==='Event'?'Event':'Event · '+e.kind,title:e.title,href:'#event/'+e.id+(organizer()?'/view':''),meta:[clock(d),e.location].filter(Boolean).join(' · '),mine:e.signedUp||e.mine});
+    for(const s of (group.slots||[]).filter(s=>s.event===e.id)){
+      const full=s.people.length>=s.capacity;
+      items.push({date:new Date(s.startsAt),kind:'Sign-up',title:s.label,href:'#event/'+e.id+(organizer()?'/view':''),meta:peopleText(s),mine:s.mine,raw:true,
+        ...(can('signups')&&(s.mine||!full)?{act:s.mine?'Signed up ✓':'Sign me up',on:s.mine,action:s.mine?'w-unclaim':'w-claim',data:{slot:s.id}}:{})});
+    }
+  }
+  if(shown('calls'))for(const c of group.openCalls||[]){
+    const toggle=can('calls')&&(!c.myStatus||c.myStatus==='interested');
+    items.push({date:deadlineDate(c.deadline),kind:'Deadline · '+c.kind,title:c.title,href:'#call/'+c.id,
+      meta:c.myStatus?'You: '+interestLabels[c.myStatus]+(c.applying?' · '+c.applying+' from the group applying':''):[c.organization,c.award].filter(Boolean).join(' · ')||'Open call',mine:!!c.myStatus,
+      ...(toggle?{act:c.myStatus?'Interested ✓':'I’m interested',on:!!c.myStatus,action:'w-interest',data:{call:c.id,status:c.myStatus?'none':'interested'}}:{})});
+  }
+  for(const a of group.myActions||[]){
+    const done=wallDone.has(a.id);
+    items.push({date:a.due?deadlineDate(a.due):null,kind:'Action item',title:a.title,href:'#'+a.meeting+(organizer()?'/view':''),meta:(overdue(a)&&!done?'Overdue · ':'')+'From '+a.meetingTitle,mine:true,done,
+      act:done?'Done ✓':'Mark done',on:done,action:'w-done',data:{item:a.id,meeting:a.meeting,done:String(!done)}});
+  }
+  return items;
+}
+function indexHtml(){
+  const days=new Map(), nodate=[];
+  for(const it of indexItems().filter(it=>!wallMine||it.mine).sort((a,b)=>(a.date??Infinity)-(b.date??Infinity))){
+    if(!it.date){nodate.push(it);continue;}
+    const k=dayKey(it.date);if(!days.has(k))days.set(k,{d:it.date,items:[]});days.get(k).items.push(it);
+  }
+  let n=0;
+  const item=it=>'<div class="w-item"><span class="eyebrow lime">'+pad2(++n)+' — '+esc(it.kind)+'</span><a class="w-ititle'+(it.done?' struck':'')+'" href="'+it.href+'">'+esc(it.title)+'</a><span class="w-meta">'+(it.raw?it.meta:esc(it.meta))+'</span>'+
+    (it.act?'<button type="button" class="w-act'+(it.on?' on':'')+'" data-action="'+it.action+'"'+Object.entries(it.data||{}).map(([k,v])=>' data-'+k+'="'+esc(v)+'"').join('')+'>'+esc(it.act)+'</button>':'')+'</div>';
+  const row=(num,sub,items)=>'<div class="w-row"><div class="w-day"><span>'+num+'</span><span class="lime">'+sub+'</span></div><div class="w-items">'+items.map(item).join('')+'</div></div>';
+  const rows=[...days.values()].map(g=>row(pad2(g.d.getDate()),esc(dowShort(g.d)+' '+monShort(g.d)),g.items)).join('')+(nodate.length?row('—','Any time',nodate):'');
+  return '<div class="w-label pad rule"><span>C — Index</span><div class="w-seg" role="group" aria-label="Show"><button type="button" data-action="w-mine" data-mine="0" aria-pressed="'+!wallMine+'">All</button><button type="button" data-action="w-mine" data-mine="1" aria-pressed="'+wallMine+'">Mine</button></div></div>'+
+    (rows||'<p class="w-none">'+(wallMine?'Nothing of yours coming up.':'Nothing coming up yet.')+'</p>');
+}
+
+function boardHtml(){
+  if(!shown('posts'))return '';
+  const list=postList.slice(0,3);
+  return '<div class="w-label pad rule"><span>D — Board</span><a class="lime" href="#board">'+(can('posts')?'All posts, write one →':'All posts →')+'</a></div>'+
+    (list.length?list.map(p=>'<a class="w-post" href="#post/'+p.id+'"><span class="eyebrow lime">'+(p.pinned?'Pinned · ':'')+esc(p.author)+' · '+ago(p.created)+'</span><strong>'+esc(p.title)+'</strong>'+(p.replies?'<span class="w-meta">'+p.replies+(p.replies===1?' reply':' replies')+'</span>':'')+'</a>').join(''):'<p class="w-none">No posts yet.</p>');
+}
+
+function sheetHtml(){
+  if(!wallSheet)return '';
+  let s;
+  if(wallSheet.type==='meet'){
+    const m=group.meetings.upcoming.find(x=>x.id===wallSheet.meeting)||group.meetings.upcoming.find(x=>x.startsAt);
+    if(!m)return '';
+    const d=new Date(m.startsAt);
+    s={kind:'Meeting · '+dueLike(m.startsAt),title:'Can you make it?',body:[clock(d)+(m.location?', '+m.location:''),m.going+' going'].join('. ')+'.',
+      opts:wallReason?'<form class="w-reason" data-form="w-sheet-reason"><label>Why can’t you make it? <small>(only organizers see this)</small><textarea name="reason" required maxlength="500" rows="2"></textarea></label><button class="w-opt on">Send</button></form>'
+        :Object.entries(rsvpLabels).map(([k,l])=>'<button type="button" class="w-opt'+(m.mine===k?' on':'')+'" data-action="w-sheet-rsvp" data-meeting="'+m.id+'" data-value="'+k+'">'+l+'</button>').join(''),
+      link:'<a href="#'+m.id+(organizer()?'/view':'')+'">Meeting page, topics and agenda →</a>'};
+  }else{
+    const e=(group.upcomingEvents||[])[0];
+    if(!e)return '';
+    const slots=(group.slots||[]).filter(x=>x.event===e.id);
+    s={kind:e.kind+' · '+dueLike(e.startsAt),title:e.title,body:esc(e.when)+(e.location?', '+esc(e.location):'')+'.',
+      opts:slots.length&&can('signups')?slots.map(x=>{const full=x.people.length>=x.capacity&&!x.mine;return '<button type="button" class="w-opt'+(x.mine?' on':'')+'" data-action="'+(x.mine?'w-unclaim':'w-claim')+'" data-slot="'+x.id+'"'+(full?' disabled':'')+'>'+esc(x.label)+' — '+(x.mine?'Signed up ✓':full?'Full':'Sign me up')+'</button>';}).join(''):'',
+      link:'<a href="#event/'+e.id+(organizer()?'/view':'')+'">Event page →</a>'};
+  }
+  return '<button type="button" class="w-scrim" data-action="w-close" aria-label="Close"></button><div class="w-sheet" role="dialog" aria-modal="true" aria-label="'+esc(s.title)+'"><span class="tape"></span><span class="eyebrow">'+esc(s.kind)+'</span><span class="w-stitle">'+esc(s.title)+'</span><span class="w-sbody">'+s.body+'</span><div class="w-opts">'+s.opts+'</div><div class="w-sfoot">'+s.link+'<button type="button" data-action="w-close">Close ✕</button></div></div>';
+}
+
+function wall(){
+  const me=group.me, now=new Date();
+  document.body.classList.add('night');
+  root.innerHTML='<div class="wall">'+
+    '<div class="w-brand"><span class="w-mark">Tower Press <em>Artist Group</em></span><span class="w-right">'+(realOrganizer()&&!preview?'<a class="w-org" href="/">Organizer</a>':'')+'<a class="w-avatar" href="#settings" aria-label="Your settings">'+esc(initials(me))+'</a></span></div>'+
+    '<div class="w-hero"><h1>On the<br><em>wall</em></h1><div class="w-date">'+esc(now.toLocaleDateString('en-GB',{weekday:'short'}).toUpperCase())+'<br>'+pad2(now.getDate())+'.'+pad2(now.getMonth()+1)+'.'+String(now.getFullYear()).slice(2)+'<br><span class="lime">WK '+isoWeek(now)+'</span></div></div>'+
+    '<section aria-label="Needs you" id="w-a">'+deckHtml()+'</section>'+
+    '<section aria-label="Pinned">'+pinnedHtml()+'</section>'+
+    '<section aria-label="Index">'+indexHtml()+'</section>'+
+    '<section aria-label="Board">'+boardHtml()+'</section>'+
+    '<div id="w-sheet">'+sheetHtml()+'</div></div>';
+  if(wallSheet)root.querySelector('.w-sheet button, .w-sheet textarea')?.focus();
+}
+function wallStart(){wallDeck=buildDeck();wallAt=0;wallReason=false;wallSheet=null;wall();}
+async function wallReload(){group=await groupApi();header();if(shown('posts'))postList=(await postsApi()).posts;wall();}
+// Slide the answered card off, then show the next one.
+async function wallNext(){
+  const card=document.querySelector('#w-card');
+  wallReason=false;
+  if(card&&!matchMedia('(prefers-reduced-motion: reduce)').matches){card.classList.add('leaving');await new Promise(r=>setTimeout(r,240));}
+  wallAt++;
+  await wallReload();
+  document.querySelector('#w-card')?.classList.add('entering');
+}
+async function wallAnswer(c,value,reason){
+  if(c.type==='rsvp'){if(value==='no'&&!reason){wallReason=true;wall();document.querySelector('[data-form=w-reason] textarea')?.focus();return false;}await api('rsvp',{status:value,reason:reason||''},c.id);}
+  else if(c.type==='vote')await api('vote',{topic:c.id,value:Number(value)},c.meeting);
+  else if(value==='skip')dismiss(c.key);
+  else if(c.type==='slot')await eventsApi('claim',{slot:c.id});
+  else if(c.type==='call')await callsApi('interest',{call:c.id,status:'interested'});
+  return true;
+}
+async function wallClick(action,d){
+  if(action==='w-choose'){if(await wallAnswer(wallDeck[wallAt],d.value))await wallNext();return true;}
+  if(action==='w-reason-cancel'){wallReason=false;wall();return true;}
+  if(action==='w-skip'){wallAt=Math.min(wallDeck.length,wallAt+1);wallReason=false;wall();return true;}
+  if(action==='w-back'){wallAt=Math.max(0,wallAt-1);wallReason=false;wall();return true;}
+  if(action==='w-redo'){try{localStorage.removeItem('tp-dismissed');}catch{}await wallReload();wallStart();return true;}
+  if(action==='w-mine'){wallMine=d.mine==='1';try{localStorage.setItem('tp-mine',wallMine?'1':'0');}catch{}wall();return true;}
+  if(action==='w-sheet'){wallSheet={type:d.sheet,meeting:d.meeting};wallReason=false;wall();return true;}
+  if(action==='w-close'){wallSheet=null;wallReason=false;wall();return true;}
+  if(action==='w-sheet-rsvp'){
+    if(d.value==='no'){wallReason=true;wallSheet.meeting=d.meeting;wall();return true;}
+    await api('rsvp',{status:d.value,reason:''},d.meeting);await wallReload();tell('Saved: '+rsvpLabels[d.value]+'.');return true;
+  }
+  if(action==='w-rsvp'){await api('rsvp',{status:'yes',reason:''},d.meeting);await wallReload();tell('You’re going.');return true;}
+  if(action==='w-claim'||action==='w-unclaim'){await eventsApi(action==='w-claim'?'claim':'unclaim',{slot:d.slot});if(document.querySelector('.wall:not(.night-page)'))await wallReload();else await refresh();tell(action==='w-claim'?'You’re signed up. You’ll get a reminder the day before.':'You’re off that slot.');return true;}
+  if(action==='w-interest'){await callsApi('interest',{call:d.call,status:d.status});await wallReload();tell(d.status==='none'?'Cleared.':'Saved: Interested.');return true;}
+  if(action==='w-done'){await request('/api/meeting',{meeting:d.meeting,action:'action-done'},{action:d.item,done:d.done==='true'});if(d.done==='true')wallDone.add(d.item);else wallDone.delete(d.item);wall();tell(d.done==='true'?'Marked done.':'Reopened.');return true;}
+  return false;
+}
+async function wallSubmit(kind,fields){
+  if(kind==='w-reason'){if(await wallAnswer(wallDeck[wallAt],'no',fields.reason))await wallNext();return true;}
+  if(kind==='n-signin'){await groupApi('signin',{email:fields.email});signAddr=fields.email.trim();signStep='code';signCode='';welcome();tell('If that address is on the member list, a code is on its way.');return true;}
+  if(kind==='n-rsvp-no'){await api('rsvp',{status:'no',reason:fields.reason},meeting.id);meeting.rsvpReason=false;await reloadMeeting();tell('Saved: Can’t make it.');return true;}
+  if(kind==='w-sheet-reason'){await api('rsvp',{status:'no',reason:fields.reason},wallSheet.meeting);wallReason=false;await wallReload();tell('Saved: Can’t make it.');return true;}
+  return false;
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&wallSheet&&document.body.classList.contains('night')){wallSheet=null;wallReason=false;wall();}});
+
+/* Pages that used to live on the dashboard */
+/* Night screens: every member page in the 5A "Night index" language. */
+const nightPages=new Set(['home','me','meetings','meeting','events','event','calls','call','settings','group','board','post','decisions','welcome']);
+function brandRow(){
+  const me=group?.me;
+  return '<div class="w-brand"><a class="w-mark" href="'+(organizer()?'#me':'/')+'">Tower Press <em>Artist Group</em></a><span class="w-right">'+(realOrganizer()&&!preview?'<a class="w-org" href="/">Organizer</a>':'')+(me?'<a class="w-avatar" href="#settings" aria-label="You">'+esc(initials(me))+'</a>':'')+'</span></div>';
+}
+function backRow(href,label,context=''){
+  return '<div class="n-back"><a href="'+href+'">← '+esc(label)+'</a><span>'+esc(context)+'</span></div>';
+}
+// Title block: big uppercase word(s) over an italic serif accent, with a three-line mono stack on the right.
+function titleBlock(top,accent,stack=[]){
+  return '<div class="w-hero"><h1>'+esc(top)+'<br><em>'+esc(accent)+'</em></h1><div class="w-date">'+stack.map((l,i)=>i===stack.length-1?'<span class="lime">'+esc(l)+'</span>':esc(l)).join('<br>')+'</div></div>';
+}
+const sectionHead=(label,count='',extra='')=>'<div class="n-head"><span>'+esc(label)+'</span>'+(extra||'<span class="lime">'+esc(count)+'</span>')+'</div>';
+const avatar=(name,i=0,cls='')=>'<span class="n-av '+['lime','purple','paper'][i%3]+' '+cls+'">'+esc(initials({name}))+'</span>';
+const toneOf=i=>['lime','paper','purple'][i%3];
+function nightPage(html){document.body.classList.add('night');root.innerHTML='<div class="wall night-page">'+html+'</div>';}
+
+/* Meetings tab: the next meeting, its topics, and past meetings. */
+function meetingsPage(){
+  const next=group.meetings.upcoming.find(m=>m.startsAt)||group.meetings.upcoming[0];
+  const others=group.meetings.upcoming.filter(m=>m!==next);
+  const pastRows=group.meetings.past.map(m=>{const d=m.startsAt?new Date(m.startsAt):null;return '<a class="n-row" href="#'+m.id+(organizer()?'/view':'')+'"><span class="n-day"><b>'+(d?pad2(d.getDate()):'—')+'</b><span class="lime">'+(d?esc(monShort(d)):'')+'</span></span><span class="n-rowmain">'+esc(m.title)+'<small>'+(m.going?m.going+' came':'Minutes')+'</small></span><span class="lime">→</span></a>';}).join('');
+  nightPage(brandRow()+titleBlock('Next','meeting',next?[next.title.split(' ').slice(0,2).join(' ').toUpperCase(),next.location?next.location.toUpperCase():'',next.going+' GOING'].filter(Boolean):['NOTHING','SCHEDULED','YET'])+
+    (next?'<div id="n-meeting">Loading…</div>':'<p class="w-none">No meeting is scheduled yet. Organizers will email everyone when one is.</p>')+
+    (others.length?sectionHead('Also coming up',others.length+'')+others.map(m=>{const d=m.startsAt?new Date(m.startsAt):null;return '<a class="n-row" href="#'+m.id+(organizer()?'/view':'')+'"><span class="n-day"><b>'+(d?pad2(d.getDate()):'—')+'</b><span class="lime">'+(d?esc(monShort(d)):'TBC')+'</span></span><span class="n-rowmain">'+esc(m.title)+'<small>'+(m.mine?'You: '+rsvpLabels[m.mine]:'RSVP needed')+'</small></span><span class="lime">→</span></a>';}).join(''):'')+
+    (group.meetings.past.length?sectionHead('Past meetings','','<a class="lime" href="#decisions">Decisions →</a>')+pastRows:''));
+  if(next)api('',undefined,next.id).then(m=>{meeting=asMember(m);const box=document.querySelector('#n-meeting');if(box)box.outerHTML=meetingBody();}).catch(e=>tell(e.message));
+}
+// The poster, RSVP, phase steps and topics for `meeting` (shared by the Meetings tab and a meeting's own page).
+function meetingBody(){
+  const m=meeting, d=m.startsAt?new Date(m.startsAt):null, mine=m.rsvp?.status;
+  const rsvp=m.me&&!m.past?(m.rsvpReason?'<form class="w-reason n-onpurple" data-form="n-rsvp-no"><label>Why can’t you make it? <small>(only organizers see this)</small><textarea name="reason" required maxlength="500" rows="2">'+esc(m.rsvp?.reason||'')+'</textarea></label><div class="n-rsvp"><button class="on">Send</button><button type="button" data-action="n-rsvp-cancel">Cancel</button></div></form>'
+      :'<div class="n-rsvp">'+[['yes','Going'],['maybe','Maybe'],['no','Can’t']].map(([k,l])=>'<button type="button" class="'+(mine===k?'on':'')+'" data-action="n-rsvp" data-value="'+k+'" aria-pressed="'+(mine===k)+'">'+l+'</button>').join('')+'</div>'):'';
+  const poster='<div class="n-poster purple"><span class="tape"></span><span class="eyebrow lime">'+esc(d?d.toLocaleDateString('en-GB',{weekday:'long'})+' · '+clock(d)+(m.duration?'–'+clock(new Date(d.getTime()+m.duration*60000)):''):'Date to be set')+'</span>'+
+    (d?'<span class="n-num">'+pad2(d.getDate())+'<i>.</i>'+pad2(d.getMonth()+1)+'</span>':'<span class="w-title">'+esc(m.title)+'</span>')+
+    '<span class="n-venue"><em>'+esc(m.location||m.title)+'</em><span class="eyebrow">'+m.attendance.going.length+' going</span></span>'+rsvp+
+    (m.startsAt?'<a class="n-cal" href="/api/calendar?meeting='+m.id+'">Add to calendar</a>':'')+'</div>';
+  const steps=['collect','vote','agenda'], at=steps.indexOf(m.phase);
+  const stepper='<div class="n-steps">'+[['01','Suggest'],['02','Vote'],['03','Agenda']].map(([n,l],i)=>'<span class="'+(i===at?'on':i<at?'past':'')+'"><small>'+n+'</small>'+l+'</span>').join('')+'</div><p class="n-hint">'+
+    ({collect:'Suggest what we should make time for, and vote on what others suggested.',vote:'Suggestions are closed. Vote on what we make time for. Tap again to undo.',agenda:'The agenda is set.'})[m.phase]+'</p>';
+  let topics='';
+  if(m.phase==='agenda'){
+    const total=m.agenda.reduce((t,a)=>t+a.minutes,0);
+    topics=sectionHead('Agenda',total+' minutes')+(m.agenda.length?m.agenda.map((a,i)=>'<div class="n-item"><span class="n-big">'+pad2(i+1)+'</span><span class="n-rowmain">'+esc(a.label)+'<small>'+esc(a.kind)+' · '+a.minutes+' min</small>'+(a.detail?'<span class="n-detail">'+para(a.detail)+'</span>':'')+'</span></div>').join(''):'<p class="w-none">The agenda is empty.</p>');
+  }else if(shown('topics')){
+    const voted=m.topics.filter(t=>t.mine).length, votable=m.topics.filter(t=>!t.own).length;
+    topics=sectionHead('Topics',m.me&&can('topics')?voted+' of '+votable+' voted':m.topics.length+'')+(m.topics.length?m.topics.map((t,i)=>nightTopic(t,i)).join(''):'<p class="w-none">No topics yet.</p>')+
+      (m.phase==='collect'&&m.me&&can('topics')?'<form class="n-suggest" data-form="topic"><span class="eyebrow lime">Suggest a topic</span><label><span class="sr">Topic</span><input name="label" maxlength="120" required placeholder="What should we make time for?"></label><label><span class="sr">Details</span><textarea name="detail" maxlength="650" rows="2" placeholder="What would you like to happen? (optional)"></textarea></label><label><span class="sr">Type</span><select name="kind">'+options('Discussion')+'</select></label>'+trap+'<button>Pin it up</button></form>':'');
+  }
+  const list=m.actions||[];
+  return '<div class="n-meet">'+poster+stepper+topics+
+    (m.notes?sectionHead('Decided')+'<p class="n-notes">'+para(m.notes)+'</p>':'')+
+    (list.length?actionPoster(list):'')+
+    (m.me&&shown('comments')?sectionHead('Discussion',(m.discussion||[]).length+'')+'<div class="n-talk">'+comments(m.discussion||[],{kind:'meeting',target:m.id})+'</div>':'')+
+    (!m.me?'<div class="n-talk">'+joinPrompt()+'</div>':'')+'</div>';
+}
+function nightTopic(t,i){
+  const canVote=meeting.phase!=='agenda'&&meeting.me&&can('topics')&&!t.own&&!t.hidden;
+  const score=t.votes!==null&&t.votes!==undefined?'<b>'+t.votes+'</b>':'';
+  const vote=canVote?'<div class="n-vote"><button type="button" data-action="cast" data-topic="'+t.id+'" data-value="1" class="'+(t.mine>0?'on':'')+'" aria-pressed="'+(t.mine>0)+'" aria-label="Vote up: '+esc(t.label)+'">▲</button>'+score+'<button type="button" data-action="cast" data-topic="'+t.id+'" data-value="-1" class="'+(t.mine<0?'on':'')+'" aria-pressed="'+(t.mine<0)+'" aria-label="Vote down: '+esc(t.label)+'">▼</button></div>':(score?'<div class="n-vote">'+score+'</div>':'');
+  const talk=t.comments?.length?'<details class="n-tc"><summary>'+t.comments.length+(t.comments.length===1?' comment':' comments')+'</summary>'+comments(t.comments,{form:false,small:true})+'</details>':'<span class="n-tc">No comments yet</span>';
+  return '<div class="n-topic"><div><span class="eyebrow lime">'+pad2(i+1)+' — '+esc(t.kind)+(t.own?' · Yours':'')+(t.carried?' · Carried over':'')+'</span><strong>'+esc(t.label)+'</strong>'+(t.detail?'<span class="n-detail">'+esc(t.detail)+'</span>':'')+talk+'</div>'+vote+'</div>';
+}
+function actionPoster(list){
+  return '<div class="n-paper"><span class="tape lime"></span><span class="eyebrow purple">Action items</span>'+list.map(a=>{
+    const done=a.status==='done', mine=a.mine;
+    return '<div class="n-check'+(done?' done':'')+'">'+(mine?'<button type="button" class="n-box'+(done?' on':'')+'" data-action="action-done" data-item="'+a.id+'" data-meeting="'+a.meeting+'" data-done="'+!done+'" aria-label="'+(done?'Mark not done: ':'Mark done: ')+esc(a.title)+'">'+(done?'✓':'')+'</button>':'<span class="n-box'+(done?' on':'')+'">'+(done?'✓':'')+'</span>')+
+      '<span><strong>'+esc(a.title)+'</strong><small>'+esc((a.ownerName||'No owner yet')+(mine?' (you)':''))+' · '+(done?'Done':a.due?'Due '+esc(dueText(a.due)):'No date')+'</small></span></div>';}).join('')+'</div>';
+}
+/* A meeting's own page: upcoming → the meeting; past → its minutes. */
+function meetingView(){
+  const m=meeting;
+  if(m.past){minutesView();return;}
+  const d=m.startsAt?new Date(m.startsAt):null;
+  nightPage((group?.me?backRow('#meetings','Meetings',m.title):brandRow())+titleBlock(d?'The':'Next',d?'meeting':'meeting',[m.title.toUpperCase(),d?d.toLocaleDateString('en-GB',{day:'numeric',month:'short'}).toUpperCase():'DATE TBC',m.attendance.going.length+' GOING'])+meetingBody());
+}
+function minutesView(){
+  const m=meeting, d=m.startsAt?new Date(m.startsAt):null, came=m.attendance.going;
+  nightPage((group?.me?backRow('#meetings','Meetings','Minutes'):brandRow())+
+    '<div class="w-hero"><h1>'+(d?pad2(d.getDate())+'.'+pad2(d.getMonth()+1):esc(m.title))+'<br><em>minutes</em></h1><div class="w-date">'+esc(m.title.toUpperCase())+'<br>'+came.length+' CAME<br><span class="lime">'+(d?d.getFullYear():'')+'</span></div></div>'+
+    (came.length?'<div class="n-faces">'+came.map((n,i)=>avatar(n,i)).join('')+'</div>':'')+
+    (m.agenda.length?sectionHead('Discussed',m.agenda.length+'')+m.agenda.map((a,i)=>'<div class="n-item"><span class="n-big">'+pad2(i+1)+'</span><span class="n-rowmain">'+esc(a.label)+'<small>'+esc(a.kind)+' · '+a.minutes+' min</small></span></div>').join(''):'')+
+    ((m.actions||[]).length?actionPoster(m.actions):'')+
+    (m.notes?sectionHead('Notes')+'<p class="n-notes">'+para(m.notes)+'</p>':'')+
+    (!m.agenda.length&&!m.notes&&!(m.actions||[]).length?'<p class="w-none">No minutes were recorded for this meeting.</p>':'')+
+    (m.me&&shown('comments')?sectionHead('Discussion',(m.discussion||[]).length+'')+'<div class="n-talk">'+comments(m.discussion||[],{kind:'meeting',target:m.id})+'</div>':''));
+}
+
+/* Events tab */
+function eventPoster(e,{big=true}={}){
+  const d=new Date(e.startsAt), words=e.title.split(/\s+/), last=words.pop();
+  return '<a class="n-poster paper'+(big?' big':'')+'" href="#event/'+e.id+(organizer()?'/view':'')+'"><span class="dot"></span><span class="eyebrow purple">'+esc(dowShort(d)+' '+d.getDate()+' '+monShort(d)+' · '+(e.kind==='Event'?'':e.kind+' ')+clock(d))+'</span><span class="n-show">'+esc(words.join(' '))+(words.length?'<br>':'')+'<em>'+esc(last)+'</em></span><span class="n-foot"><b>'+esc(e.location||'Place to be confirmed')+'</b><b>'+(e.spots?(e.spots-e.taken)+' spots open':'')+'</b></span></a>';
+}
+function slotLine(s,{event}={}){
+  const full=s.people.length>=s.capacity, ppl=s.people;
+  const dots=Array.from({length:s.capacity},(_,i)=>'<i class="'+(s.mine&&i===ppl.length-1?'me':i<ppl.length?'on':'')+'"></i>').join('');
+  const btn=!can('signups')||event?.past?'':s.mine?'<button type="button" class="n-btn on" data-action="w-unclaim" data-slot="'+s.id+'">Signed up ✓</button>':full?'<span class="n-btn off">Full</span>':'<button type="button" class="n-btn" data-action="w-claim" data-slot="'+s.id+'">Sign me up</button>';
+  const at=s.startsAt?new Date(s.startsAt):s.local?new Date(s.local):event?new Date(event.startsAt):null, timed=s.startsAt?s.timed:!!s.local;
+  const when=at?dowShort(at)+' '+at.getDate()+' '+monShort(at)+(timed?' · '+clock(at):''):'';
+  return '<div class="n-slot'+(full&&!s.mine?' full':'')+'"><span><span class="eyebrow lime">'+esc(when)+'</span><strong>'+esc(s.label)+'</strong><small><span class="n-dots">'+dots+'</span>'+(ppl.length?esc(ppl.join(', '))+' · '+ppl.length+' of '+s.capacity:'Nobody yet · 0 of '+s.capacity)+'</small></span>'+btn+'</div>';
+}
+function eventsPage(){
+  const list=eventList.upcoming, first=list[0], rest=list.slice(1);
+  const slots=first&&shown('signups')?(group.slots||[]).filter(s=>s.event===first.id):[];
+  const open=slots.reduce((n,s)=>n+Math.max(0,s.capacity-s.people.length),0);
+  nightPage(brandRow()+titleBlock('Coming','up',['SHOWS','WORKSHOPS','OPEN DAYS'])+
+    (first?eventPoster(first):'<p class="w-none">Nothing coming up yet.</p>')+
+    (slots.length?sectionHead('Help wanted',open+(open===1?' spot open':' spots open'))+slots.map(s=>slotLine(s,{event:first})).join(''):'')+
+    (rest.length?sectionHead('Also on',rest.length+'')+rest.map(e=>{const d=new Date(e.startsAt);return '<a class="n-row" href="#event/'+e.id+(organizer()?'/view':'')+'"><span class="n-day"><b>'+pad2(d.getDate())+'</b><span class="lime">'+esc(dowShort(d)+' '+monShort(d))+'</span></span><span class="n-rowmain"><span class="eyebrow lime">'+esc(e.kind)+'</span>'+esc(e.title)+'<small>'+esc([clock(d),e.location].filter(Boolean).join(' · '))+(e.signedUp?' · You’re helping':'')+'</small></span><span class="lime">→</span></a>';}).join(''):'')+
+    (can('events')?'<details class="n-add"><summary>Add an event</summary><form data-form="event-create">'+eventFields()+'<button>Add event</button><p class="n-hint">You can add sign-up slots, like gallery sitting or install crew, on the next page.</p></form></details>':'')+
+    (eventList.past.length?sectionHead('Past',eventList.past.length+'')+eventList.past.slice(0,10).map(e=>'<a class="n-row" href="#event/'+e.id+'"><span class="n-rowmain">'+esc(e.title)+'<small>'+esc(e.when)+'</small></span><span class="lime">→</span></a>').join(''):''));
+}
+function eventView(){
+  const e=event;
+  const slots=e.slots.map(s=>({...s,people:s.people.map(p=>p.name),mine:s.mine}));
+  const open=slots.reduce((n,s)=>n+Math.max(0,s.capacity-s.people.length),0);
+  nightPage(backRow('#events','Events',e.kind)+eventPoster({...e,spots:0,taken:0})+
+    (e.link?'<p class="n-link"><a href="'+esc(e.link)+'" target="_blank" rel="noopener">'+esc(e.link)+'</a></p>':'')+
+    '<p class="n-link">'+esc(e.when)+(e.location?' · '+esc(e.location):'')+'</p>'+
+    (e.description?sectionHead('About')+'<p class="n-body">'+para(e.description)+'</p><p class="n-hint">Added by '+esc(e.author||'a member')+'</p>':'')+
+    (slots.length&&shown('signups')?sectionHead('Help wanted',open+(open===1?' spot open':' spots open'))+slots.map(s=>slotLine(s,{event:e})).join(''):'')+
+    (e.canEdit&&!preview?'<p class="n-link"><a class="lime" href="#event/'+e.id+'/manage">Manage this event →</a></p>':'')+
+    (shown('comments')?sectionHead('Discussion',e.comments.length+'')+'<div class="n-talk">'+comments(e.comments,{kind:'event',target:e.id})+'</div>':''));
+}
+
+/* Calls tab */
+function statusButtons(c,tone){
+  if(!can('calls')||c.closed)return '';
+  return '<div class="n-status t-'+tone+'">'+Object.entries(interestLabels).map(([k,l])=>'<button type="button" class="'+(c.myStatus===k?'on':'')+'" data-action="interest" data-call="'+c.id+'" data-status="'+(c.myStatus===k?'none':k)+'" aria-pressed="'+(c.myStatus===k)+'">'+l+'</button>').join('')+'</div>';
+}
+function callPoster(c,i){
+  const left=daysUntil(c.deadline), tone=toneOf(i);
+  return '<div class="n-call '+tone+'"><span class="tape"></span><a class="n-callhead" href="#call/'+c.id+'"><span class="n-days">'+Math.max(0,left)+'</span><span><span class="eyebrow">'+esc(c.kind)+' · '+(left===0?'due today':left===1?'day left':'days left')+'</span><span class="n-ctitle">'+esc(c.title)+'</span></span></a>'+
+    '<span class="n-cmeta">'+esc([c.organization,c.award].filter(Boolean).join(' · ')||'Open call')+'</span><span class="eyebrow">'+(c.applying?c.applying+' from the group applying':'Nobody from the group yet')+'</span>'+statusButtons(c,tone)+'</div>';
+}
+function callsPage(){
+  const kinds=[...new Set(callList.open.map(c=>c.kind))];
+  const shownCalls=callList.open.filter(c=>!callFilter||c.kind===callFilter);
+  nightPage(brandRow()+titleBlock('Open','calls',['RESIDENCIES','GRANTS','EXHIBITIONS'])+
+    (kinds.length>1?'<div class="n-chips">'+['',...kinds].map(k=>'<button type="button" class="'+(callFilter===k?'on':'')+'" data-action="call-filter" data-kind="'+esc(k)+'">'+esc(k||'All')+'</button>').join('')+'</div>':'')+
+    '<div class="n-calls">'+(shownCalls.length?shownCalls.map(callPoster).join(''):'<p class="w-none">No open calls yet.'+(can('calls')?' Share one below.':'')+'</p>')+'</div>'+
+    (can('calls')?'<details class="n-add"><summary>Share an open call</summary><form data-form="call-create">'+callFields()+'<button>Share with the group</button></form></details>':'')+
+    (callList.closed.length?sectionHead('Closed',callList.closed.length+'')+callList.closed.map(c=>'<a class="n-row" href="#call/'+c.id+'"><span class="n-rowmain">'+esc(c.title)+'<small>'+esc(c.kind)+' · closed '+esc(dueText(c.deadline))+'</small></span><span class="lime">→</span></a>').join(''):''));
+}
+function callPage(){
+  const c=call, left=daysUntil(c.deadline);
+  const facts=[['Award',c.award],['Deadline',dueText(c.deadline)+(c.closed?' (closed)':'')],['Offered by',c.organization],['Link',c.link?'<a href="'+esc(c.link)+'" target="_blank" rel="noopener">'+esc(c.link.replace(/^https?:\/\//,''))+'</a>':'']].filter(([,v])=>v);
+  const people=Object.entries(c.people).flatMap(([s,list])=>list.map(n=>({n,s})));
+  nightPage(backRow('#calls','Calls',c.kind)+
+    '<div class="n-poster lime"><span class="tape"></span>'+(c.closed?'<span class="eyebrow">Closed</span>':'<span class="n-left"><b>'+Math.max(0,left)+'</b><span>'+(left===1?'day':'days')+'<br>to apply</span></span>')+'<span class="w-title">'+esc(c.title)+'</span>'+(c.organization?'<em class="n-org">'+esc(c.organization)+'</em>':'')+'</div>'+
+    '<div class="n-facts">'+facts.map(([k,v])=>'<div><span class="eyebrow lime">'+k+'</span><span>'+(k==='Link'?v:esc(v))+'</span></div>').join('')+'</div>'+
+    (c.details?sectionHead('Details')+'<p class="n-body">'+para(c.details)+'</p><p class="n-hint">Shared by '+esc(c.author||'a member')+'</p>':'')+
+    (can('calls')&&!c.closed?sectionHead('Your status')+statusButtons(c,'ink')+'<p class="n-hint">Interested or applying gets you reminders a week and a day before the deadline.</p>':'')+
+    sectionHead('From the group',people.length+'')+(people.length?people.map((p,i)=>'<div class="n-person">'+avatar(p.n,i)+'<span>'+esc(p.n)+'</span><span class="eyebrow lime">'+interestLabels[p.s]+'</span></div>').join(''):'<p class="w-none">Nobody yet.</p>')+
+    (shown('comments')?sectionHead('Discussion',c.comments.length+'')+'<div class="n-talk">'+comments(c.comments,{kind:'call',target:c.id})+'</div>':'')+
+    (c.canEdit&&!preview?'<details class="n-add"><summary>Edit this call</summary><form data-form="call-update">'+callFields(c)+'<button>Save</button></form></details><div class="n-danger">'+(organizer()?'<button type="button" data-action="call-hide" data-hidden="'+!c.hidden+'">'+(c.hidden?'Show call':'Hide call')+'</button>':'')+'<button type="button" data-action="call-delete">Delete this call</button></div>':''));
+}
+
+/* Members directory and You */
+let directory=[], memberFilter='', memberQuery='';
+function directoryPage(){
+  const q=memberQuery.trim().toLowerCase();
+  const list=directory.filter(m=>(!memberFilter||m.role===memberFilter)&&(!q||m.name.toLowerCase().includes(q)));
+  const since=directory.reduce((y,m)=>Math.min(y,new Date(m.since).getFullYear()),new Date().getFullYear());
+  const rows=list.map((m,i)=>'<div class="n-person big">'+avatar(m.name,i)+'<span><strong>'+esc(m.name)+(m.me?' (you)':'')+'</strong><small>Member since '+new Date(m.since).getFullYear()+'</small></span>'+(m.role==='organizer'?'<span class="eyebrow lime">Organizer</span>':'<span></span>')+'</div>').join('');
+  const box=document.querySelector('#n-dir');
+  if(box){box.innerHTML=rows||'<p class="w-none">Nobody matches.</p>';return;}
+  nightPage(backRow('#settings','You',directory.length+' members')+titleBlock('The','group',['SINCE',String(since),'EST.'])+
+    '<div class="n-search"><label><span class="sr">Find someone</span><input id="n-q" type="search" placeholder="Find someone" value="'+esc(memberQuery)+'"></label></div>'+
+    '<div class="n-chips">'+[['','All'],['organizer','Organizers']].map(([k,l])=>'<button type="button" class="'+(memberFilter===k?'on':'')+'" data-action="n-mfilter" data-role="'+k+'">'+l+'</button>').join('')+'</div>'+
+    '<div id="n-dir" class="n-rule">'+(rows||'<p class="w-none">Nobody matches.</p>')+'</div>');
+}
+function settingsPage(){
+  const me=group.me, mineMeet=group.meetings.upcoming.filter(m=>m.mine==='yes'||m.mine==='maybe');
+  const down=[
+    ...mineMeet.filter(m=>m.startsAt).map(m=>({d:new Date(m.startsAt),k:'Meeting · '+rsvpLabels[m.mine],t:m.title,h:'#'+m.id+(organizer()?'/view':'')})),
+    ...(group.slots||[]).filter(s=>s.mine).map(s=>({d:new Date(s.startsAt),k:'Sign-up · '+s.eventTitle,t:s.label,h:'#event/'+s.event})),
+    ...(group.openCalls||[]).filter(c=>c.myStatus).map(c=>({d:deadlineDate(c.deadline),k:c.kind+' · '+interestLabels[c.myStatus],t:c.title,h:'#call/'+c.id})),
+    ...(group.myActions||[]).map(a=>({d:a.due?deadlineDate(a.due):null,k:'Action item'+(a.due?' · due':''),t:a.title,h:'#'+a.meeting+(organizer()?'/view':'')}))
+  ].sort((a,b)=>(a.d??Infinity)-(b.d??Infinity));
+  const value=me.emails==='none'?'none':me.digest;
+  const opt=(v,l,dsc)=>'<label class="n-switch"><span><strong>'+l+'</strong><small>'+dsc+'</small></span><input type="radio" name="email" value="'+v+'"'+(value===v?' checked':'')+'><i></i></label>';
+  nightPage(backRow(organizer()?'#me':'/','Wall','')+
+    '<div class="n-poster lime n-profile"><span class="tape"></span><span class="n-av purple huge">'+esc(initials(me))+'</span><span><span class="w-title">'+esc(me.name||me.email.split('@')[0])+'</span><em class="n-org">'+(me.role==='organizer'?'Organizer':'Member')+'</em><span class="eyebrow">'+esc(me.email)+'</span></span></div>'+
+    sectionHead('You’re down for',down.length+(down.length===1?' thing':' things'))+
+    (down.length?down.map(x=>'<a class="n-row" href="'+x.h+'"><span class="n-day"><b>'+(x.d?pad2(x.d.getDate()):'—')+'</b><span class="lime">'+(x.d?esc(monShort(x.d)):'Any')+'</span></span><span class="n-rowmain"><span class="eyebrow lime">'+esc(x.k)+'</span>'+esc(x.t)+'</span></a>').join(''):'<p class="w-none">Nothing yet. Answer a few things on the wall.</p>')+
+    '<a class="n-row" href="#group"><span class="n-rowmain">Members directory<small>Who’s in the group</small></span><span class="lime">→</span></a>'+
+    '<form data-form="profile">'+sectionHead('Email me')+'<fieldset class="n-fs"><legend class="sr">Email</legend>'+
+      opt('instant','Everything right away','Each post and reply as it happens')+opt('daily','Daily summary','One email a day with what’s new')+opt('weekly','Weekly summary','One email on Mondays')+opt('none','Off','No emails at all, not even invitations')+
+    '</fieldset><p class="n-hint">Meeting invitations, agendas and reminders always come right away unless email is off.</p>'+
+    sectionHead('Your name')+'<div class="n-search"><label><span class="sr">Name</span><input name="name" maxlength="80" value="'+esc(me.name)+'"></label></div><div class="n-pad"><button class="n-btn on">Save</button></div></form>'+
+    '<div class="n-panels">'+installPanel()+calendarPanel()+'</div>'+
+    '<div class="n-pad"><button type="button" class="n-signout" data-action="signout">Sign out</button></div>');
+}
+
+/* Pages the design didn't cover, in the same language */
+/* Sign in (screen 09): email, then a 6-digit code with a keypad. */
+let signStep='email', signAddr='', signCode='', signName='';
+function welcome(){
+  const poster='<div class="n-poster lime n-brandposter"><span class="tape"></span><span class="sq"></span><span class="eyebrow">Members only</span><span class="n-tp">Tower<br>Press</span><em class="n-org purple">Artist Group</em></div>';
+  const setup='<form data-form="setup"><label>Organizer key<input type="password" name="organizerKey" required autocomplete="off"></label><label>Your name<input name="name" maxlength="80" required></label><label>Your email<input type="email" name="email" required maxlength="254"></label><button>Set up and sign in</button></form>';
+  let body;
+  if(signStep==='in'){
+    body='<div class="n-signin"><span class="n-welcome">Welcome back,<br><em>'+esc(signName)+'</em></span><a class="n-wide" href="/">Go to the wall</a></div>';
+  }else if(signStep==='code'){
+    const boxes=Array.from({length:6},(_,i)=>'<span class="'+(i===signCode.length?'now':'')+'">'+esc(signCode[i]||'')+'</span>').join('');
+    const keys=['1','2','3','4','5','6','7','8','9','','0','del'].map(k=>k===''?'<span></span>':'<button type="button" data-action="'+(k==='del'?'n-del':'n-key')+'" data-key="'+k+'" aria-label="'+(k==='del'?'Delete':k)+'">'+(k==='del'?'⌫':k)+'</button>').join('');
+    body='<div class="n-signin"><span class="eyebrow">Enter the code we sent to</span><span class="n-addr">'+esc(signAddr)+'</span>'+
+      '<label class="n-codefield"><span class="sr">6-digit code</span><input id="n-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" value="'+esc(signCode)+'"><span class="n-boxes" aria-hidden="true">'+boxes+'</span></label>'+
+      '<div class="n-keys">'+keys+'</div><button type="button" class="n-textbtn" data-action="n-change">← Change email</button></div>';
+  }else{
+    body='<form class="n-signin" data-form="n-signin"><label><span class="eyebrow">Sign in with your studio email</span><input class="n-serif" type="email" name="email" required maxlength="254" autocomplete="email" placeholder="you@example.org" value="'+esc(signAddr)+'"></label><p class="n-hint flush">We’ll email you a 6-digit code. You won’t need a password.</p><button class="n-wide">Send me a code</button></form>'+
+      '<details class="n-add"><summary>Not a member yet? Ask to join</summary><form data-form="join"><p class="n-hint flush">An organizer will approve you, and you’ll get an email.</p><label>Name<input name="name" required maxlength="80" autocomplete="name"></label><label>Email<input type="email" name="email" required maxlength="254" autocomplete="email"></label>'+trap+'<button>Ask to join</button></form></details>';
+  }
+  nightPage(poster+body+
+    (group.needsSetup?'<div class="n-add open"><span class="eyebrow lime">Set up the group</span><p class="n-hint flush">No organizers yet. Enter the organizer key from Vercel to become the first organizer.</p>'+setup+'</div>'
+      :signStep==='email'?'<details class="n-add"><summary>Organizer key</summary><p class="n-hint flush">Lost access? The organizer key from Vercel signs you in as an organizer.</p>'+setup+'</details>':''));
+  if(signStep==='code')document.querySelector('#n-code')?.focus();
+}
+async function signDigits(value){
+  signCode=value.replace(/\D/g,'').slice(0,6);
+  welcome();
+  if(signCode.length<6)return;
+  await new Promise(r=>setTimeout(r,450));
+  try{
+    await groupApi('code',{email:signAddr,code:signCode});
+    const g=await groupApi();signName=g.me?.name||g.me?.email.split('@')[0]||'';signStep='in';welcome();
+  }catch(error){signCode='';welcome();tell(error.message);}
+}
+
+/* Posts (screen 10) and a post (screen 11) */
+let composer=false;
+function postCard(p,i){
+  const tone=p.pinned?'lime':'paper';
+  return '<a class="n-postcard '+tone+(i%2?' tilt':'')+'" href="#post/'+p.id+'"><span class="tape"></span><span class="n-by">'+avatar(p.author,p.pinned?1:i,'small')+'<span><b>'+esc(p.author)+'</b><small>'+esc(ago(p.created))+'</small></span>'+(p.pinned||p.hidden?'<span class="n-tag">'+(p.pinned?'Pinned':'')+(p.pinned&&p.hidden?' · ':'')+(p.hidden?'Hidden':'')+'</span>':'')+'</span>'+
+    '<span class="n-ptitle">'+esc(p.title)+'</span>'+(p.excerpt?'<span class="n-pbody">'+esc(p.excerpt.slice(0,160))+(p.excerpt.length>160?'…':'')+'</span>':'')+
+    '<span class="n-pfoot"><span>'+(p.replies?p.replies+(p.replies===1?' reply':' replies'):'No replies yet')+' →</span></span></a>';
+}
+function boardPage(){
+  nightPage(backRow(organizer()?'#me':'/','Wall',postList.length+' on the board')+
+    '<div class="w-hero"><h1>Posts<br><em>&amp; notes</em></h1>'+(can('posts')?'<button type="button" class="n-pin" data-action="n-compose">+ Pin a post</button>':'')+'</div>'+
+    '<div class="n-posts">'+(postList.length?postList.map(postCard).join(''):'<p class="w-none">Nothing on the board yet.'+(can('posts')?' Pin the first post.':'')+'</p>')+'</div>'+
+    (composer?'<button type="button" class="w-scrim" data-action="n-compose-close" aria-label="Close"></button><form class="w-sheet n-composer" data-form="post" role="dialog" aria-modal="true" aria-label="Pin a post"><span class="tape"></span><span class="eyebrow">New post · everyone gets it by email</span><label><span class="sr">Headline</span><input name="title" required maxlength="140" placeholder="Headline" autocomplete="off"></label><label><span class="sr">Details</span><textarea name="body" maxlength="6000" rows="5" placeholder="Details (optional)"></textarea></label><div class="w-sfoot"><button type="button" data-action="n-compose-close">Close ✕</button><button class="w-opt on n-pinit" disabled>Pin it up</button></div></form>':''));
+  if(composer)document.querySelector('.n-composer input')?.focus();
+}
+function replyList(list){
+  return list.map((c,i)=>'<div class="n-reply'+(c.hidden?' hidden-topic':'')+'">'+avatar(c.author,i)+'<span><span class="n-rhead"><b>'+esc(c.author)+'</b><span class="eyebrow lime">'+esc(ago(c.created))+(c.via==='email'?' · email':'')+'</span></span><span class="n-rbody">'+para(c.body)+'</span>'+((c.mine||organizer())?'<button type="button" class="link" data-action="delete-comment" data-comment="'+c.id+'">Delete</button>':'')+'</span></div>').join('');
+}
+function replyBox(kind,target){
+  if(!can('comments'))return '';
+  return '<form class="n-replybox" data-form="comment" data-kind="'+kind+'" data-target="'+target+'"><label><span class="sr">Your reply</span><textarea name="body" maxlength="3000" required rows="2" placeholder="Write a reply"></textarea></label><button disabled>Reply</button></form>';
+}
+function postPage(){
+  const p=post;
+  nightPage(backRow('#board','Posts',p.pinned?'Pinned':'')+
+    '<div class="n-poster paper n-post"><span class="tape lime"></span><span class="n-by">'+avatar(p.author,1)+'<span><b>'+esc(p.author)+'</b><small>'+esc(ago(p.created))+(p.hidden?' · hidden':'')+'</small></span></span><span class="n-ptitle big">'+esc(p.title)+'</span>'+(p.body?'<span class="n-pbody">'+para(p.body)+'</span>':'')+
+    '<span class="n-pfoot"><span>'+p.comments.length+(p.comments.length===1?' reply':' replies')+'</span></span></div>'+
+    (shown('comments')?sectionHead('Replies')+'<div class="n-replies">'+(p.comments.length?replyList(p.comments):'<p class="w-none">No replies yet.</p>')+'</div>'+replyBox('post',p.id):'')+
+    ((organizer()||p.mine)?'<div class="n-danger">'+(organizer()?'<button type="button" data-action="pin-post" data-pinned="'+!p.pinned+'">'+(p.pinned?'Unpin':'Pin to top')+'</button><button type="button" data-action="hide-post" data-hidden="'+!p.hidden+'">'+(p.hidden?'Show':'Hide')+'</button>':'')+'<button type="button" data-action="delete-post">Delete post</button></div>':''));
+}
+
+/* Decisions (screen 12): the log of what past meetings decided. */
+let decFilter='';
+function decisionsPage(){
+  const q=(document.querySelector('#search')?.value||'').trim().toLowerCase();
+  const kinds=[...new Set(decisionsData.flatMap(m=>m.agenda.map(a=>a.kind)))];
+  let n=decisionsData.reduce((t,m)=>t+m.agenda.length,0);
+  const rows=decisionsData.map(m=>{
+    const d=m.startsAt?new Date(m.startsAt):null;
+    const items=m.agenda.map(a=>({...a,num:n--})).filter(a=>(!decFilter||a.kind===decFilter)&&(!q||(a.label+' '+a.detail+' '+m.title).toLowerCase().includes(q)));
+    const notes=(!decFilter||decFilter==='notes')&&m.notes&&(!q||m.notes.toLowerCase().includes(q)||m.title.toLowerCase().includes(q));
+    if(!items.length&&!notes)return '';
+    return '<div class="w-row"><div class="w-day"><span>'+(d?pad2(d.getDate()):'—')+'</span><span class="lime">'+(d?esc(monShort(d)+' '+String(d.getFullYear()).slice(2)):'')+'</span></div><div class="w-items">'+
+      items.map(a=>'<div class="w-item"><span class="eyebrow lime">D-'+a.num+' — '+esc(a.kind)+'</span><a class="w-ititle" href="#'+m.id+(organizer()?'/view':'')+'">'+esc(a.label)+'</a><span class="w-meta">'+esc(m.title)+' · '+a.minutes+' min</span></div>').join('')+
+      (notes?'<div class="w-item"><span class="eyebrow lime">Notes</span><span class="n-notes small flush">'+para(m.notes)+'</span></div>':'')+'</div></div>';
+  }).join('');
+  const results=document.querySelector('#results');
+  if(results){results.innerHTML=rows||'<p class="w-none">Nothing matches.</p>';return;}
+  const total=decisionsData.reduce((t,m)=>t+m.agenda.length,0);
+  nightPage(backRow('#meetings','Meetings',decisionsData.length+(decisionsData.length===1?' meeting':' meetings'))+titleBlock('What we','decided',[total+' ON','RECORD',decisionsData.length+(decisionsData.length===1?' MEETING':' MEETINGS')])+
+    '<div class="n-search"><label><span class="sr">Search</span><input id="search" type="search" placeholder="Search decisions, topics, people"></label></div>'+
+    '<div class="n-head"><span>The log</span>'+(kinds.length>1?'<div class="w-seg">'+[['','All'],...kinds.map(k=>[k,k]),['notes','Notes']].map(([k,l])=>'<button type="button" data-action="n-dfilter" data-kind="'+esc(k)+'" aria-pressed="'+(decFilter===k)+'">'+esc(l)+'</button>').join('')+'</div>':'')+'</div>'+
+    '<div id="results">'+(rows||'<p class="w-none">No past meetings yet.</p>')+'</div>');
+}
+
+async function nightClick(action,d,button){
+  if(action==='n-key'){if(signCode.length<6)await signDigits(signCode+d.key);return true;}
+  if(action==='n-del'){signCode=signCode.slice(0,-1);welcome();return true;}
+  if(action==='n-change'){signStep='email';signCode='';welcome();return true;}
+  if(action==='n-compose'){composer=true;boardPage();return true;}
+  if(action==='n-compose-close'){composer=false;boardPage();return true;}
+  if(action==='n-dfilter'){decFilter=d.kind;document.querySelector('#results')?.remove();decisionsPage();return true;}
+  if(action==='n-rsvp'){
+    if(d.value==='no'){meeting.rsvpReason=true;rerenderMeeting();document.querySelector('[data-form=n-rsvp-no] textarea')?.focus();return true;}
+    await api('rsvp',{status:d.value,reason:''},meeting.id);await reloadMeeting();tell('Saved: '+rsvpLabels[d.value]+'.');return true;
+  }
+  if(action==='n-rsvp-cancel'){meeting.rsvpReason=false;rerenderMeeting();return true;}
+  if(action==='n-mfilter'){memberFilter=d.role;directoryPage();document.querySelectorAll('[data-action=n-mfilter]').forEach(b=>b.classList.toggle('on',b.dataset.role===memberFilter));return true;}
+  return false;
+}
+function rerenderMeeting(){const box=document.querySelector('.n-meet');if(box&&route.page==='meetings')box.outerHTML=meetingBody();else meetingView();}
+async function reloadMeeting(){meeting=asMember(await api('',undefined,meeting.id));if(route.page==='meetings'){group=await groupApi();meetingsPage();}else meetingView();}
+
 async function show(){
+  document.body.classList.remove('night');
   if(!group.me&&route.page!=='meeting'){welcome();return;}
   if((route.page==='organize'||route.page==='members')&&!organizer()){location.hash='';return;}
   switch(route.page){
@@ -414,10 +835,14 @@ async function show(){
       else meetingView();
       return;
     }
-    case 'me': postList=shown('posts')?(await postsApi()).posts:[]; dashboard(); return;
+    case 'me': postList=shown('posts')?(await postsApi()).posts:[]; wallStart(); return;
+    case 'meetings': meetingsPage(); return;
+    case 'board': postList=shown('posts')?(await postsApi()).posts:[]; boardPage(); return;
+    case 'settings': settingsPage(); return;
+    case 'group': directory=(await groupApi('',undefined,{view:'directory'})).directory; directoryPage(); return;
     default:
       if(organizer()){route.page='organize';group=await groupApi('',undefined,{view:'organize'});header();organize();return;}
-      postList=shown('posts')?(await postsApi()).posts:[]; dashboard();
+      postList=shown('posts')?(await postsApi()).posts:[]; wallStart();
   }
 }
 async function load(){
@@ -446,7 +871,7 @@ document.addEventListener('click',event=>{
   setPreview(!preview);
   location.reload();
 });
-root.addEventListener('input',event=>{if(event.target.id==='search')decisionsPage();});
+root.addEventListener('input',event=>{if(event.target.id==='n-code'){signDigits(event.target.value);return;}const f=event.target.closest('form');if(f?.matches('.n-composer,.n-replybox')){const b=f.querySelector('.n-pinit,.n-replybox button');if(b)b.disabled=!f.querySelector(f.matches('.n-composer')?'input':'textarea').value.trim();}if(event.target.id==='search')decisionsPage();if(event.target.id==='n-q'){memberQuery=event.target.value;directoryPage();}});
 root.addEventListener('change',event=>{
   if(event.target.name==='status'&&event.target.closest('[data-form=rsvp]')){
     const reason=root.querySelector('[data-reason]');
@@ -457,6 +882,7 @@ root.addEventListener('submit',ev=>{
   ev.preventDefault();
   const form=ev.target, data=new FormData(form), fields=Object.fromEntries(data), kind=form.dataset.form;
   perform(ev.submitter,async()=>{
+    if((kind?.startsWith('w-')||kind?.startsWith('n-'))&&await wallSubmit(kind,fields))return;
     let result={};
     switch(kind){
       case 'signin': result=await groupApi('signin',{email:fields.email}); form.outerHTML=codeForm(fields.email); tell(result.notice); document.querySelector('[data-form=code] input[name=code]')?.focus(); return;
@@ -496,11 +922,13 @@ root.addEventListener('click',ev=>{
   if(!button||button.dataset.action==='preview')return;
   const action=button.dataset.action, d=button.dataset;
   perform(button,async()=>{
+    if(action.startsWith('w-')&&await wallClick(action,d))return;
+    if(action.startsWith('n-')&&await nightClick(action,d,button))return;
     if(action==='signout'){setPreview(false);await groupApi('signout',{});location.href='/';return;}
     if(action==='copy'){const f=document.querySelector(d.target);f.select();try{await navigator.clipboard.writeText(f.value);tell('Link copied.');}catch{tell('Link selected. Copy it from the field.');}return;}
     if(action==='feed'){
       if(group.feedUrl&&!confirm('Make a new link? The old one will stop working in calendars that use it.'))return;
-      group.feedUrl=(await groupApi('feed',{})).feedUrl;dashboard();tell('Your calendar link is ready.');return;
+      group.feedUrl=(await groupApi('feed',{})).feedUrl;settingsPage();tell('Your calendar link is ready.');return;
     }
     if(['approve','decline','role','remove-member'].includes(action)){
       if(action==='remove-member'&&!confirm('Remove '+d.name+' from the group?'))return;
@@ -519,7 +947,7 @@ root.addEventListener('click',ev=>{
     if(action==='install'){if(installPrompt){installPrompt.prompt();installPrompt=null;}return;}
     if(action==='install-dismiss'){try{localStorage.setItem('tp-install','no');}catch{}button.closest('section')?.remove();return;}
     if(action==='call-filter'){callFilter=d.kind;callsPage();return;}
-    if(action==='interest'){await callsApi('interest',{call:route.id,status:d.status});await refresh();tell(d.status==='none'?'Cleared.':'Saved: '+interestLabels[d.status]+'.');return;}
+    if(action==='interest'){await callsApi('interest',{call:d.call||route.id,status:d.status});await refresh();tell(d.status==='none'?'Cleared.':'Saved: '+interestLabels[d.status]+'.');return;}
     if(action==='call-hide'){await callsApi('hide',{call:route.id,hidden:d.hidden==='true'});await refresh();tell('Saved.');return;}
     if(action==='call-delete'){if(!confirm('Delete “'+call.title+'” and its discussion? This can’t be undone.'))return;await callsApi('delete',{call:route.id});location.hash='calls';return;}
     if(action==='event-hide'){await eventsApi('hide',{event:route.id,hidden:d.hidden==='true'});await refresh();tell('Saved.');return;}

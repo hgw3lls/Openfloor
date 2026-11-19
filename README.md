@@ -21,6 +21,29 @@ Open Floor lets artists submit topics, optionally vote for up to two, and see th
 
 **Topics and voting.** Members suggest topics and vote 👍 or 👎 until the agenda is published, one vote each and never on their own topics. Votes from email count as the same person as votes on the site. Organizers can edit, hide or delete any topic, build the agenda from the top topics, publish it (members get it by email with calendar links), and record and email the outcomes.
 
+## The wall (member home screen)
+
+Members land on **the wall**, a dark "night index" built for phones. It has four sections:
+
+- **A — Needs you** is a stack of decisions answered one at a time: RSVPs to upcoming meetings, topics to vote on, open sign-up slots and new open calls. "Can't make it" asks for a reason, which only organizers see. "Not this time" and "Not for me" hide that slot or call on that device; **Redo** brings them back.
+- **B — Pinned** has posters for the next meeting and the next event. Tap one to RSVP or sign up.
+- **C — Index** lists everything coming up by day: meetings, events, sign-up slots, open-call deadlines and your action items. Each has a one-tap action, and **All / Mine** narrows the list to what involves you.
+- **D — Board** shows the latest posts.
+
+Every member screen uses the same "night index" design:
+- **Meetings:** the next meeting as a purple poster with RSVP buttons, the Suggest / Vote / Agenda steps, topics with ▲/▼ votes, and a "Pin it up" box for suggestions. Members see vote scores only once the agenda is set.
+- **Minutes:** each past meeting's minutes, with who came, what was discussed, the action items poster (tick off your own) and the notes.
+- **Events:** a poster for the next event, help-wanted slots with capacity dots, and an "Also on" list.
+- **Calls:** poster cards with the days left and Interested / Applying / Applied buttons; each call's own page has the key facts and who from the group is going for it.
+- **Members:** a directory of names and roles, with no email addresses.
+- **You:** your profile, everything you're down for, email settings, calendar link and sign out.
+
+- **Sign in:** enter your email, then type the 6-digit code from the email on a keypad. It signs you in as soon as the sixth digit is in.
+- **Posts & notes:** posts are pinned-up cards (the pinned one in lime). "+ Pin a post" opens a lime sheet to write one. Each post's page lists the replies, with a reply box underneath.
+- **What we decided:** a log of what past meetings discussed, with their notes, filters and search. The organizer panel and the organizers' manage pages keep the lighter paper style.
+
+A tab bar (Wall, Meetings, Events, Calls) sits at the bottom of the wall and of every page on phones. The initials in the corner open **You**: email settings, the calendar link, add to phone, and sign out. Organizers reach their wall from **Wall** and get back with **Organizer**. The wall follows the feature switches. Fonts (Geist, Instrument Serif, JetBrains Mono, under the SIL Open Font License) are served from the site.
+
 ## On your phone
 
 The site can be saved to a phone's home screen, where it opens full-screen like an app with the Tower Press icon. Members see an **Add to your phone** panel on their page with the steps: on iPhone, in Safari, use Share → Add to Home Screen; on Android, use the **Install the app** button or Chrome's menu. On iPhone, the home-screen app doesn't share Safari's sign-in. That's why sign-in emails also carry a 6-digit code to type into the app. Each code works once, for 30 minutes, with five tries an hour per address. After that, members stay signed in for a year.
