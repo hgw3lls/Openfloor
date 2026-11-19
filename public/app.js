@@ -495,6 +495,7 @@ async function wallClick(action,d){
 }
 async function wallSubmit(kind,fields){
   if(kind==='w-reason'){if(await wallAnswer(wallDeck[wallAt],'no',fields.reason))await wallNext();return true;}
+  if(kind==='n-signin'){await groupApi('signin',{email:fields.email});signAddr=fields.email.trim();signStep='code';signCode='';welcome();tell('If that address is on the member list, a code is on its way.');return true;}
   if(kind==='n-rsvp-no'){await api('rsvp',{status:'no',reason:fields.reason},meeting.id);meeting.rsvpReason=false;await reloadMeeting();tell('Saved: Can’t make it.');return true;}
   if(kind==='w-sheet-reason'){await api('rsvp',{status:'no',reason:fields.reason},wallSheet.meeting);wallReason=false;await wallReload();tell('Saved: Can’t make it.');return true;}
   return false;
@@ -699,36 +700,102 @@ function settingsPage(){
 }
 
 /* Pages the design didn't cover, in the same language */
+/* Sign in (screen 09): email, then a 6-digit code with a keypad. */
+let signStep='email', signAddr='', signCode='', signName='';
+function welcome(){
+  const poster='<div class="n-poster lime n-brandposter"><span class="tape"></span><span class="sq"></span><span class="eyebrow">Members only</span><span class="n-tp">Tower<br>Press</span><em class="n-org purple">Artist Group</em></div>';
+  const setup='<form data-form="setup"><label>Organizer key<input type="password" name="organizerKey" required autocomplete="off"></label><label>Your name<input name="name" maxlength="80" required></label><label>Your email<input type="email" name="email" required maxlength="254"></label><button>Set up and sign in</button></form>';
+  let body;
+  if(signStep==='in'){
+    body='<div class="n-signin"><span class="n-welcome">Welcome back,<br><em>'+esc(signName)+'</em></span><a class="n-wide" href="/">Go to the wall</a></div>';
+  }else if(signStep==='code'){
+    const boxes=Array.from({length:6},(_,i)=>'<span class="'+(i===signCode.length?'now':'')+'">'+esc(signCode[i]||'')+'</span>').join('');
+    const keys=['1','2','3','4','5','6','7','8','9','','0','del'].map(k=>k===''?'<span></span>':'<button type="button" data-action="'+(k==='del'?'n-del':'n-key')+'" data-key="'+k+'" aria-label="'+(k==='del'?'Delete':k)+'">'+(k==='del'?'⌫':k)+'</button>').join('');
+    body='<div class="n-signin"><span class="eyebrow">Enter the code we sent to</span><span class="n-addr">'+esc(signAddr)+'</span>'+
+      '<label class="n-codefield"><span class="sr">6-digit code</span><input id="n-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" value="'+esc(signCode)+'"><span class="n-boxes" aria-hidden="true">'+boxes+'</span></label>'+
+      '<div class="n-keys">'+keys+'</div><button type="button" class="n-textbtn" data-action="n-change">← Change email</button></div>';
+  }else{
+    body='<form class="n-signin" data-form="n-signin"><label><span class="eyebrow">Sign in with your studio email</span><input class="n-serif" type="email" name="email" required maxlength="254" autocomplete="email" placeholder="you@example.org" value="'+esc(signAddr)+'"></label><p class="n-hint flush">We’ll email you a 6-digit code. You won’t need a password.</p><button class="n-wide">Send me a code</button></form>'+
+      '<details class="n-add"><summary>Not a member yet? Ask to join</summary><form data-form="join"><p class="n-hint flush">An organizer will approve you, and you’ll get an email.</p><label>Name<input name="name" required maxlength="80" autocomplete="name"></label><label>Email<input type="email" name="email" required maxlength="254" autocomplete="email"></label>'+trap+'<button>Ask to join</button></form></details>';
+  }
+  nightPage(poster+body+
+    (group.needsSetup?'<div class="n-add open"><span class="eyebrow lime">Set up the group</span><p class="n-hint flush">No organizers yet. Enter the organizer key from Vercel to become the first organizer.</p>'+setup+'</div>'
+      :signStep==='email'?'<details class="n-add"><summary>Organizer key</summary><p class="n-hint flush">Lost access? The organizer key from Vercel signs you in as an organizer.</p>'+setup+'</details>':''));
+  if(signStep==='code')document.querySelector('#n-code')?.focus();
+}
+async function signDigits(value){
+  signCode=value.replace(/\D/g,'').slice(0,6);
+  welcome();
+  if(signCode.length<6)return;
+  await new Promise(r=>setTimeout(r,450));
+  try{
+    await groupApi('code',{email:signAddr,code:signCode});
+    const g=await groupApi();signName=g.me?.name||g.me?.email.split('@')[0]||'';signStep='in';welcome();
+  }catch(error){signCode='';welcome();tell(error.message);}
+}
+
+/* Posts (screen 10) and a post (screen 11) */
+let composer=false;
+function postCard(p,i){
+  const tone=p.pinned?'lime':'paper';
+  return '<a class="n-postcard '+tone+(i%2?' tilt':'')+'" href="#post/'+p.id+'"><span class="tape"></span><span class="n-by">'+avatar(p.author,p.pinned?1:i,'small')+'<span><b>'+esc(p.author)+'</b><small>'+esc(ago(p.created))+'</small></span>'+(p.pinned||p.hidden?'<span class="n-tag">'+(p.pinned?'Pinned':'')+(p.pinned&&p.hidden?' · ':'')+(p.hidden?'Hidden':'')+'</span>':'')+'</span>'+
+    '<span class="n-ptitle">'+esc(p.title)+'</span>'+(p.excerpt?'<span class="n-pbody">'+esc(p.excerpt.slice(0,160))+(p.excerpt.length>160?'…':'')+'</span>':'')+
+    '<span class="n-pfoot"><span>'+(p.replies?p.replies+(p.replies===1?' reply':' replies'):'No replies yet')+' →</span></span></a>';
+}
 function boardPage(){
-  nightPage(brandRow()+titleBlock('The','board',['POSTS','NEWS','QUESTIONS'])+
-    (can('posts')?'<details class="n-add"><summary>Write a post</summary><form data-form="post"><label>Title<input name="title" required maxlength="140"></label><label>Message<textarea name="body" maxlength="6000" rows="6"></textarea></label><button>Post to the group</button></form></details>':'')+
-    '<div class="n-rule">'+(postList.length?postList.map(p=>'<a class="w-post" href="#post/'+p.id+'"><span class="eyebrow lime">'+(p.pinned?'Pinned · ':'')+esc(p.author)+' · '+ago(p.created)+(p.hidden?' · hidden':'')+'</span><strong>'+esc(p.title)+'</strong>'+(p.excerpt?'<span class="w-meta">'+esc(p.excerpt.slice(0,140))+(p.excerpt.length>140?'…':'')+'</span>':'')+(p.replies?'<span class="w-meta">'+p.replies+(p.replies===1?' reply':' replies')+'</span>':'')+'</a>').join(''):'<p class="w-none">No posts yet.</p>')+'</div>');
+  nightPage(backRow(organizer()?'#me':'/','Wall',postList.length+' on the board')+
+    '<div class="w-hero"><h1>Posts<br><em>&amp; notes</em></h1>'+(can('posts')?'<button type="button" class="n-pin" data-action="n-compose">+ Pin a post</button>':'')+'</div>'+
+    '<div class="n-posts">'+(postList.length?postList.map(postCard).join(''):'<p class="w-none">Nothing on the board yet.'+(can('posts')?' Pin the first post.':'')+'</p>')+'</div>'+
+    (composer?'<button type="button" class="w-scrim" data-action="n-compose-close" aria-label="Close"></button><form class="w-sheet n-composer" data-form="post" role="dialog" aria-modal="true" aria-label="Pin a post"><span class="tape"></span><span class="eyebrow">New post · everyone gets it by email</span><label><span class="sr">Headline</span><input name="title" required maxlength="140" placeholder="Headline" autocomplete="off"></label><label><span class="sr">Details</span><textarea name="body" maxlength="6000" rows="5" placeholder="Details (optional)"></textarea></label><div class="w-sfoot"><button type="button" data-action="n-compose-close">Close ✕</button><button class="w-opt on n-pinit" disabled>Pin it up</button></div></form>':''));
+  if(composer)document.querySelector('.n-composer input')?.focus();
+}
+function replyList(list){
+  return list.map((c,i)=>'<div class="n-reply'+(c.hidden?' hidden-topic':'')+'">'+avatar(c.author,i)+'<span><span class="n-rhead"><b>'+esc(c.author)+'</b><span class="eyebrow lime">'+esc(ago(c.created))+(c.via==='email'?' · email':'')+'</span></span><span class="n-rbody">'+para(c.body)+'</span>'+((c.mine||organizer())?'<button type="button" class="link" data-action="delete-comment" data-comment="'+c.id+'">Delete</button>':'')+'</span></div>').join('');
+}
+function replyBox(kind,target){
+  if(!can('comments'))return '';
+  return '<form class="n-replybox" data-form="comment" data-kind="'+kind+'" data-target="'+target+'"><label><span class="sr">Your reply</span><textarea name="body" maxlength="3000" required rows="2" placeholder="Write a reply"></textarea></label><button disabled>Reply</button></form>';
 }
 function postPage(){
   const p=post;
-  nightPage(backRow('#board','Board',p.pinned?'Pinned':'')+
-    '<div class="n-poster paper"><span class="tape lime"></span><span class="eyebrow purple">'+esc(p.author)+' · '+ago(p.created)+(p.hidden?' · hidden':'')+'</span><span class="w-title">'+esc(p.title)+'</span>'+(p.body?'<span class="n-detail">'+para(p.body)+'</span>':'')+'</div>'+
-    (shown('comments')?sectionHead('Replies',p.comments.length+'')+'<div class="n-talk">'+comments(p.comments,{kind:'post',target:p.id})+'</div>':'')+
+  nightPage(backRow('#board','Posts',p.pinned?'Pinned':'')+
+    '<div class="n-poster paper n-post"><span class="tape lime"></span><span class="n-by">'+avatar(p.author,1)+'<span><b>'+esc(p.author)+'</b><small>'+esc(ago(p.created))+(p.hidden?' · hidden':'')+'</small></span></span><span class="n-ptitle big">'+esc(p.title)+'</span>'+(p.body?'<span class="n-pbody">'+para(p.body)+'</span>':'')+
+    '<span class="n-pfoot"><span>'+p.comments.length+(p.comments.length===1?' reply':' replies')+'</span></span></div>'+
+    (shown('comments')?sectionHead('Replies')+'<div class="n-replies">'+(p.comments.length?replyList(p.comments):'<p class="w-none">No replies yet.</p>')+'</div>'+replyBox('post',p.id):'')+
     ((organizer()||p.mine)?'<div class="n-danger">'+(organizer()?'<button type="button" data-action="pin-post" data-pinned="'+!p.pinned+'">'+(p.pinned?'Unpin':'Pin to top')+'</button><button type="button" data-action="hide-post" data-hidden="'+!p.hidden+'">'+(p.hidden?'Show':'Hide')+'</button>':'')+'<button type="button" data-action="delete-post">Delete post</button></div>':''));
 }
+
+/* Decisions (screen 12): the log of what past meetings decided. */
+let decFilter='';
 function decisionsPage(){
   const q=(document.querySelector('#search')?.value||'').trim().toLowerCase();
-  const match=m=>!q||JSON.stringify([m.title,m.notes,m.agenda.map(a=>a.label+' '+a.detail),m.actions.map(a=>a.title+' '+a.ownerName)]).toLowerCase().includes(q);
-  const html=decisionsData.filter(match).map(m=>{const d=m.startsAt?new Date(m.startsAt):null;return '<div class="n-dec"><a class="n-row" href="#'+m.id+(organizer()?'/view':'')+'"><span class="n-day"><b>'+(d?pad2(d.getDate()):'—')+'</b><span class="lime">'+(d?esc(monShort(d)+' '+String(d.getFullYear()).slice(2)):'')+'</span></span><span class="n-rowmain">'+esc(m.title)+'<small>'+m.agenda.length+' discussed · '+m.actions.length+' actions</small></span><span class="lime">→</span></a>'+(m.notes?'<p class="n-notes small">'+para(m.notes)+'</p>':'')+'</div>';}).join('');
+  const kinds=[...new Set(decisionsData.flatMap(m=>m.agenda.map(a=>a.kind)))];
+  let n=decisionsData.reduce((t,m)=>t+m.agenda.length,0);
+  const rows=decisionsData.map(m=>{
+    const d=m.startsAt?new Date(m.startsAt):null;
+    const items=m.agenda.map(a=>({...a,num:n--})).filter(a=>(!decFilter||a.kind===decFilter)&&(!q||(a.label+' '+a.detail+' '+m.title).toLowerCase().includes(q)));
+    const notes=(!decFilter||decFilter==='notes')&&m.notes&&(!q||m.notes.toLowerCase().includes(q)||m.title.toLowerCase().includes(q));
+    if(!items.length&&!notes)return '';
+    return '<div class="w-row"><div class="w-day"><span>'+(d?pad2(d.getDate()):'—')+'</span><span class="lime">'+(d?esc(monShort(d)+' '+String(d.getFullYear()).slice(2)):'')+'</span></div><div class="w-items">'+
+      items.map(a=>'<div class="w-item"><span class="eyebrow lime">D-'+a.num+' — '+esc(a.kind)+'</span><a class="w-ititle" href="#'+m.id+(organizer()?'/view':'')+'">'+esc(a.label)+'</a><span class="w-meta">'+esc(m.title)+' · '+a.minutes+' min</span></div>').join('')+
+      (notes?'<div class="w-item"><span class="eyebrow lime">Notes</span><span class="n-notes small flush">'+para(m.notes)+'</span></div>':'')+'</div></div>';
+  }).join('');
   const results=document.querySelector('#results');
-  if(results){results.innerHTML=html||'<p class="w-none">Nothing matches.</p>';return;}
-  nightPage(backRow('#meetings','Meetings','')+titleBlock('What we','decided',['AGENDAS','DECISIONS','ACTIONS'])+
-    '<div class="n-search"><label><span class="sr">Search</span><input id="search" type="search" placeholder="Search decisions, topics, people"></label></div><div id="results" class="n-rule">'+(html||'<p class="w-none">No past meetings yet.</p>')+'</div>');
+  if(results){results.innerHTML=rows||'<p class="w-none">Nothing matches.</p>';return;}
+  const total=decisionsData.reduce((t,m)=>t+m.agenda.length,0);
+  nightPage(backRow('#meetings','Meetings',decisionsData.length+(decisionsData.length===1?' meeting':' meetings'))+titleBlock('What we','decided',[total+' ON','RECORD',decisionsData.length+(decisionsData.length===1?' MEETING':' MEETINGS')])+
+    '<div class="n-search"><label><span class="sr">Search</span><input id="search" type="search" placeholder="Search decisions, topics, people"></label></div>'+
+    '<div class="n-head"><span>The log</span>'+(kinds.length>1?'<div class="w-seg">'+[['','All'],...kinds.map(k=>[k,k]),['notes','Notes']].map(([k,l])=>'<button type="button" data-action="n-dfilter" data-kind="'+esc(k)+'" aria-pressed="'+(decFilter===k)+'">'+esc(l)+'</button>').join('')+'</div>':'')+'</div>'+
+    '<div id="results">'+(rows||'<p class="w-none">No past meetings yet.</p>')+'</div>');
 }
-function welcome(){
-  const setup='<form data-form="setup"><label>Organizer key<input type="password" name="organizerKey" required autocomplete="off"></label><label>Your name<input name="name" maxlength="80" required></label><label>Your email<input type="email" name="email" required maxlength="254"></label><button>Set up and sign in</button></form>';
-  nightPage(brandRow()+titleBlock('On the','wall',['MEETINGS','EVENTS','OPEN CALLS'])+
-    (group.needsSetup?'<div class="n-add open"><span class="eyebrow lime">Set up the group</span><p class="n-hint">No organizers yet. Enter the organizer key from Vercel to become the first organizer.</p>'+setup+'</div>':'')+
-    '<div class="n-poster lime"><span class="tape"></span><span class="eyebrow">Members</span><span class="w-title">Sign in</span><form data-form="signin"><p class="n-detail">We’ll email you a link and a 6-digit code. No password.</p><label><span class="sr">Email</span><input type="email" name="email" required maxlength="254" autocomplete="email" placeholder="you@example.org"></label><button class="fill">Email me a sign-in link</button></form></div>'+
-    '<details class="n-add"><summary>Join the group</summary><form data-form="join"><p class="n-hint">Ask to join. An organizer will approve you, and you’ll get an email.</p><label>Name<input name="name" required maxlength="80" autocomplete="name"></label><label>Email<input type="email" name="email" required maxlength="254" autocomplete="email"></label>'+trap+'<button>Ask to join</button></form></details>'+
-    (group.needsSetup?'':'<details class="n-add"><summary>Organizer key</summary><p class="n-hint">Lost access? The organizer key from Vercel signs you in as an organizer.</p>'+setup+'</details>'));
-}
+
 async function nightClick(action,d,button){
+  if(action==='n-key'){if(signCode.length<6)await signDigits(signCode+d.key);return true;}
+  if(action==='n-del'){signCode=signCode.slice(0,-1);welcome();return true;}
+  if(action==='n-change'){signStep='email';signCode='';welcome();return true;}
+  if(action==='n-compose'){composer=true;boardPage();return true;}
+  if(action==='n-compose-close'){composer=false;boardPage();return true;}
+  if(action==='n-dfilter'){decFilter=d.kind;document.querySelector('#results')?.remove();decisionsPage();return true;}
   if(action==='n-rsvp'){
     if(d.value==='no'){meeting.rsvpReason=true;rerenderMeeting();document.querySelector('[data-form=n-rsvp-no] textarea')?.focus();return true;}
     await api('rsvp',{status:d.value,reason:''},meeting.id);await reloadMeeting();tell('Saved: '+rsvpLabels[d.value]+'.');return true;
@@ -804,7 +871,7 @@ document.addEventListener('click',event=>{
   setPreview(!preview);
   location.reload();
 });
-root.addEventListener('input',event=>{if(event.target.id==='search')decisionsPage();if(event.target.id==='n-q'){memberQuery=event.target.value;directoryPage();}});
+root.addEventListener('input',event=>{if(event.target.id==='n-code'){signDigits(event.target.value);return;}const f=event.target.closest('form');if(f?.matches('.n-composer,.n-replybox')){const b=f.querySelector('.n-pinit,.n-replybox button');if(b)b.disabled=!f.querySelector(f.matches('.n-composer')?'input':'textarea').value.trim();}if(event.target.id==='search')decisionsPage();if(event.target.id==='n-q'){memberQuery=event.target.value;directoryPage();}});
 root.addEventListener('change',event=>{
   if(event.target.name==='status'&&event.target.closest('[data-form=rsvp]')){
     const reason=root.querySelector('[data-reason]');

@@ -38,7 +38,9 @@ Every member screen uses the same "night index" design:
 - **Members:** a directory of names and roles, with no email addresses.
 - **You:** your profile, everything you're down for, email settings, calendar link and sign out.
 
-Posts, decisions and sign-in follow the same look. The organizer panel and the organizers' manage pages keep the lighter paper style.
+- **Sign in:** enter your email, then type the 6-digit code from the email on a keypad. It signs you in as soon as the sixth digit is in.
+- **Posts & notes:** posts are pinned-up cards (the pinned one in lime). "+ Pin a post" opens a lime sheet to write one. Each post's page lists the replies, with a reply box underneath.
+- **What we decided:** a log of what past meetings discussed, with their notes, filters and search. The organizer panel and the organizers' manage pages keep the lighter paper style.
 
 A tab bar (Wall, Meetings, Events, Calls) sits at the bottom of the wall and of every page on phones. The initials in the corner open **You**: email settings, the calendar link, add to phone, and sign out. Organizers reach their wall from **Wall** and get back with **Organizer**. The wall follows the feature switches. Fonts (Geist, Instrument Serif, JetBrains Mono, under the SIL Open Font License) are served from the site.
 
