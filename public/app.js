@@ -725,7 +725,10 @@ function settingsPage(){
     '<a class="n-row" href="#group"><span class="n-rowmain">Members directory<small>Who’s in the group'+((group.inToday||[]).length?' · '+group.inToday.length+' in today':'')+'</small></span><span class="lime">→</span></a>'+
     '<form data-form="profile">'+sectionHead('Email me')+'<fieldset class="n-fs"><legend class="sr">Email</legend>'+
       opt('instant','Everything right away','Each post and reply as it happens')+opt('daily','Daily summary','One email a day with what’s new')+opt('weekly','Weekly summary','One email on Mondays')+opt('none','Off','No emails at all, not even invitations')+
-    '</fieldset><p class="n-hint">Meeting invitations, agendas and reminders always come right away unless email is off.</p>'+
+    '</fieldset><p class="n-hint">Meeting invitations, agendas and reminders come right away unless you switch them off below.</p>'+
+    sectionHead('Notify me about')+(()=>{const n=me.notify||{};const sw=(k,l,dsc)=>'<label class="n-switch"><span><strong>'+l+'</strong><small>'+dsc+'</small></span><input type="checkbox" name="notify_'+k+'"'+(n[k]!==false?' checked':'')+'><i></i></label>';
+      return sw('meetings','Meetings','Invitations, agendas, reminders and minutes')+(shown('proposals')?sw('proposals','Proposals and votes','When voting opens, and a reminder before it closes'):'')+(shown('calls')?sw('calls','Open calls','New calls and closing deadlines'):'')+(shown('signups')?sw('signups','Sign-up reminders','The day before you’re on'):'');})()+
+    '<p class="n-hint">Cancellations and your own action items always come.</p>'+
     sectionHead('Your name')+'<div class="n-search"><label><span class="sr">Name</span><input name="name" maxlength="80" value="'+esc(me.name)+'"></label></div>'+
     sectionHead('Your medium')+'<div class="n-search"><label><span class="sr">Medium</span><input name="medium" maxlength="80" value="'+esc(me.medium||'')+'" placeholder="Relief, woodcut"></label></div><div class="n-pad"><button class="n-btn on">Save</button></div></form>'+
     '<div class="n-panels">'+installPanel()+calendarPanel()+'</div>'+
@@ -1002,7 +1005,7 @@ root.addEventListener('submit',ev=>{
       case 'code': await groupApi('code',{email:fields.email,code:fields.code}); location.reload(); return;
       case 'join': result=await groupApi('join',fields); form.reset(); tell(result.notice); return;
       case 'setup': await groupApi('setup',fields); location.href='/'; return;
-      case 'profile': await groupApi('profile',{name:fields.name,medium:fields.medium,emails:fields.email==='none'?'none':'all',digest:fields.email==='none'?undefined:fields.email}); await refresh(); tell('Settings saved.'); return;
+      case 'profile': await groupApi('profile',{name:fields.name,medium:fields.medium,notify:{meetings:data.has('notify_meetings'),proposals:form.querySelector('[name=notify_proposals]')?data.has('notify_proposals'):undefined,calls:form.querySelector('[name=notify_calls]')?data.has('notify_calls'):undefined,signups:form.querySelector('[name=notify_signups]')?data.has('notify_signups'):undefined},emails:fields.email==='none'?'none':'all',digest:fields.email==='none'?undefined:fields.email}); await refresh(); tell('Settings saved.'); return;
       case 'add-members': result=await groupApi('add',{people:fields.people,role:data.has('organizer')?'organizer':'member'}); await refresh(); tell(result.notice); return;
       case 'promote': result=await groupApi('role',{member:fields.member,role:'organizer'}); await refresh(); tell(result.notice); return;
       case 'features': await groupApi('features',fields); await refresh(); tell('Saved. Members see the change right away.'); return;
