@@ -170,3 +170,43 @@ test('deleting an event: author or organizer, optional cancellation email to the
   assert.equal((await w.org.events('delete', {event: G})).body.notice, 'Event deleted.');
   assert.equal(w.mailer.outbox.length, 0);
 });
+
+test('I’m going: on the site and from the email (scanner-safe), counts and names, feature switches', async () => {
+  const w = await world();
+  const E = await showWithSlots(w);
+  assert.equal((await w.ben.events('going', {event: E, going: true})).status, 200);
+  assert.equal((await w.ben.events('going', {event: E, going: true})).status, 200, 'twice is fine');
+  let list = (await w.ana.events()).body.upcoming[0];
+  assert.deepEqual([list.goingCount, list.going], [1, false]);
+  assert.deepEqual((await w.ana.events('', undefined, {event: E})).body.event.goingPeople, ['Ben']);
+  assert.equal((await w.ben.events('', undefined, {event: E})).body.event.going, true);
+
+  // From the announcement email: opening the link does nothing; the button does it.
+  w.mailer.outbox.length = 0;
+  await w.org.events('announce', {event: E});
+  const anaMail = w.mailer.outbox.find(m => m.to === 'ana@example.org');
+  const url = link('going', anaMail.html);
+  assert.match((await visit(w.db, url)).text, /I’m going/);
+  assert.equal((await w.ana.events()).body.upcoming[0].going, false);
+  assert.match((await visit(w.db, url, 'POST')).text, /You’re going/);
+  list = (await w.ana.events()).body.upcoming[0];
+  assert.deepEqual([list.goingCount, list.going], [2, true]);
+
+  await w.ben.events('going', {event: E, going: false});
+  assert.deepEqual((await w.org.events('', undefined, {event: E})).body.event.goingPeople, ['Ana']);
+
+  // View-only events: members can't mark themselves, and the email has no button.
+  await w.org.group('features', {events: 'view'});
+  assert.equal((await w.ben.events('going', {event: E, going: true})).status, 403);
+  w.mailer.outbox.length = 0;
+  await w.org.events('announce', {event: E});
+  assert.ok(!/a=going/.test(w.mailer.outbox.find(m => m.to === 'ben@example.org').html));
+  assert.match((await visit(w.db, url, 'POST')).text, /view-only/);
+
+  // Past events can't be joined; deleting an event clears its list.
+  await w.org.group('features', {events: 'full'});
+  const old = (await w.ana.events('create', {title: 'Old opening', local: local(Date.now() - 3 * DAY), timezone: 'UTC', duration: 60})).body.id;
+  assert.equal((await w.ben.events('going', {event: old, going: true})).status, 409);
+  await w.org.events('delete', {event: E});
+  assert.equal((await w.pg.query('SELECT count(*)::int n FROM going')).rows[0].n, 0);
+});

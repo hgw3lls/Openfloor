@@ -70,6 +70,8 @@ Use **Preview as member** to check what members see.
 
 Any member can add an event (show, opening, workshop, workday, social) on the **Events** page. Events appear on the dashboard, in members' summaries and in everyone's calendar link. Organizers can also email everyone about an event straight away.
 
+Members tap **I'm going** on an event, on the site or from the email announcing it, and everyone can see who's going. The count shows on the event's poster and in the index; your events also appear under "You're down for". When events are view-only for members, nobody but organizers can mark themselves going.
+
 An event can have sign-up slots, like "Gallery sitting, Saturday 12–3" for 2 people. Members sign up or drop out on the site or with one tap from an email; slots can't be overfilled. Volunteers get a reminder the day before their slot, and their sign-ups show on their dashboard and calendar. Organizers can **Ask for help**, which emails members who haven't signed up yet, listing the open slots. The person who added an event and organizers can edit it and manage its slots. They can also delete it from the bottom of its Manage page, optionally emailing a cancellation: to everyone if the event was emailed to everyone, otherwise to the people who signed up. Each event has a discussion, and replying to an event email adds to it.
 
 ## Open calls
