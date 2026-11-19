@@ -32,7 +32,7 @@ Members land on **the wall**, a dark "night index" built for phones. It has four
 
 Every member screen uses the same "night index" design:
 - **Meetings:** the next meeting as a purple poster with RSVP buttons, the Suggest / Vote / Agenda steps, topics with ▲/▼ votes, and a "Pin it up" box for suggestions. Members see vote scores only once the agenda is set.
-- **Minutes:** each past meeting's minutes, with who came, what was discussed, the action items poster (tick off your own) and the notes.
+- **Minutes:** each past meeting's minutes, with who came, what was decided, the action items poster (tick off your own) and the notes. On a meeting's manage page, organizers record each agenda item's result: Carried or Not carried (with For and Against counts), Agreed by all, or Noted. Results show in the minutes and the decisions log, and items that didn't carry are struck through.
 - **Events:** a poster for the next event, help-wanted slots with capacity dots, and an "Also on" list.
 - **Calls:** poster cards with the days left and Interested / Applying / Applied buttons; each call's own page has the key facts and who from the group is going for it.
 - **Members:** a directory of names, mediums and roles, with no email addresses. Members add their medium ("Relief, woodcut") on You. Organizers give people a role label like Committee or Treasurer from the Members page; it's just a label and doesn't grant organizer access. You can search by name or technique, and filter by role.
