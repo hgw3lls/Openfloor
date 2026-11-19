@@ -29,12 +29,12 @@ async function world() {
 
 test('features: everything on by default; only organizers change them; bad values are ignored', async () => {
   const w = await world();
-  const all = {topics: 'full', posts: 'full', comments: 'full', events: 'full', signups: 'full', calls: 'full'};
+  const all = {topics: 'full', posts: 'full', comments: 'full', events: 'full', signups: 'full', proposals: 'full', calls: 'full'};
   assert.deepEqual((await w.ana.group()).body.features, all);
   assert.equal((await w.ana.group('features', {calls: 'off'})).status, 403);
   assert.deepEqual(await w.set({calls: 'off', posts: 'view', events: 'sideways', nonsense: 'off'}), {...all, calls: 'off', posts: 'view'});
   assert.deepEqual(await w.set({posts: 'full'}), {...all, calls: 'off'}, 'one change keeps the others');
-  assert.ok((await w.org.group()).body.featureList.length === 6);
+  assert.ok((await w.org.group()).body.featureList.length === 7);
   assert.equal((await w.ana.group()).body.featureList, undefined);
 });
 

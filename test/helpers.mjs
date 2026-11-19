@@ -7,6 +7,7 @@ import {group} from '../lib/group.mjs';
 import {posts} from '../lib/posts.mjs';
 import {events} from '../lib/events.mjs';
 import {calls} from '../lib/calls.mjs';
+import {proposals} from '../lib/proposals.mjs';
 import {newToken, startSession} from '../lib/auth.mjs';
 
 export const ORIGIN = 'https://floor.test', KEY = 'orgkey';
@@ -60,6 +61,7 @@ export function client(db, mailer, {session, ip = '203.0.113.1'} = {}) {
     posts: (action = '', payload, params = {}) => send(postsHandler, '/api/posts', {action, ...params}, payload),
     events: (action = '', payload, params = {}) => send((request, db, key, mailer, defer) => events(request, db, mailer, defer), '/api/events', {action, ...params}, payload),
     calls: (action = '', payload, params = {}) => send((request, db, key, mailer, defer) => calls(request, db, mailer, defer), '/api/calls', {action, ...params}, payload),
+    proposals: (action = '', payload, params = {}) => send((request, db, key, mailer, defer) => proposals(request, db, mailer, defer), '/api/proposals', {action, ...params}, payload),
     groupView: view => send(group, '/api/group', {view}, undefined)};
 }
 
