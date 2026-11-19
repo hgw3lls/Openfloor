@@ -29,6 +29,16 @@ For organizers, meeting and event links (including links in emails) open the **M
 
 **Preview as member** (top bar) switches the whole site to what regular members see (dashboard, meeting and event pages) with a banner to leave preview.
 
+## What members can use
+
+On the organizer panel, **What members can use** switches each feature **On**, **View only** or **Off** for everyone who isn't an organizer. The features are meeting topics and voting, posts, discussions and replies, events, volunteer sign-ups, and open calls. Organizers always have everything, and RSVPs and action items are always on.
+
+- **View only:** members can read but can't add, vote, sign up or reply. That applies on the site, through email buttons and through email replies.
+- **Off:** the feature disappears for members. Its page and top-bar link, dashboard panel, calendar entries, summary section and instant emails all go away.
+- **Voting email:** the "Vote on the topics" email only goes to people who can vote.
+
+Use **Preview as member** to check what members see.
+
 ## Events and sign-ups
 
 Any member can add an event (show, opening, workshop, workday, social) on the **Events** page. Events appear on the dashboard, in members' summaries and in everyone's calendar link. Organizers can also email everyone about an event straight away.
