@@ -118,7 +118,23 @@ function dashboard(){
       (postList.length?postList.map(p=>'<a class="card" href="#post/'+p.id+'"><strong>'+(p.pinned?'📌 ':'')+esc(p.title)+'</strong><span class="muted">'+esc(p.author)+' · '+ago(p.created)+(p.replies?' · '+p.replies+(p.replies===1?' reply':' replies'):'')+(p.hidden?' · hidden':'')+'</span>'+(p.excerpt?'<span>'+esc(p.excerpt)+(p.excerpt.length>=240?'…':'')+'</span>':'')+'</a>').join(''):'<p class="muted">No posts yet.</p>')+
       (can('posts')?'<details class="draft"><summary>Write a post</summary><form data-form="post"><label>Title<input name="title" required maxlength="140"></label><label>Message<textarea name="body" maxlength="6000" rows="6"></textarea></label><button>Post to the group</button></form></details>':'')+'</section>':'')+
     (group.meetings.past.length?'<section class="panel"><h2>Past meetings</h2>'+group.meetings.past.map(meetingCard).join('')+'</section>':'')+
-    calendarPanel()+settingsForm(me);
+    installPanel()+calendarPanel()+settingsForm(me);
+}
+/* Save to the phone's home screen */
+let installPrompt=null;
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;document.querySelector('[data-action=install]')?.removeAttribute('hidden');});
+const standalone=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+function installPanel(){
+  let dismissed=false;try{dismissed=localStorage.getItem('tp-install')==='no';}catch{}
+  if(standalone()||dismissed)return '';
+  const ios=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  return '<section class="panel"><h2>Add to your phone</h2><p class="muted">Save '+esc(group.group)+' to your home screen and it opens like an app.</p>'+
+    (ios?'<ol><li>Open this page in <strong>Safari</strong>.</li><li>Tap the <strong>Share</strong> button (the square with an arrow).</li><li>Tap <strong>Add to Home Screen</strong>, then <strong>Add</strong>.</li><li>Open it from your home screen and sign in once. Ask for a sign-in email and type the 6-digit code from it.</li></ol>'
+      :'<p><button type="button" data-action="install"'+(installPrompt?'':' hidden')+'>Install the app</button></p><p class="muted">No button? In Chrome, open the <strong>⋮</strong> menu and choose <strong>Add to Home screen</strong> or <strong>Install app</strong>.</p>')+
+    '<p><button type="button" class="link" data-action="install-dismiss">Don’t show this again</button></p></section>';
+}
+function codeForm(email){
+  return '<form class="panel" data-form="code"><h2>Check your email</h2><p class="muted">Tap the link in the email, or type the 6-digit code from it here.</p><input type="hidden" name="email" value="'+esc(email)+'"><label>Code<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" maxlength="7" required></label><button>Sign in</button></form>';
 }
 function calendarPanel(){
   const url=group.feedUrl;
@@ -443,7 +459,8 @@ root.addEventListener('submit',ev=>{
   perform(ev.submitter,async()=>{
     let result={};
     switch(kind){
-      case 'signin': result=await groupApi('signin',{email:fields.email}); form.reset(); tell(result.notice); return;
+      case 'signin': result=await groupApi('signin',{email:fields.email}); form.outerHTML=codeForm(fields.email); tell(result.notice); document.querySelector('[data-form=code] input[name=code]')?.focus(); return;
+      case 'code': await groupApi('code',{email:fields.email,code:fields.code}); location.reload(); return;
       case 'join': result=await groupApi('join',fields); form.reset(); tell(result.notice); return;
       case 'setup': await groupApi('setup',fields); location.href='/'; return;
       case 'profile': await groupApi('profile',{name:fields.name,emails:fields.email==='none'?'none':'all',digest:fields.email==='none'?undefined:fields.email}); await refresh(); tell('Settings saved.'); return;
@@ -499,6 +516,8 @@ root.addEventListener('click',ev=>{
     if(action==='remove-claim'){if(!confirm('Take this person off the slot?'))return;await eventsApi('remove-claim',{event:route.id,slot:d.slot,member:d.member});await refresh();tell('Removed.');return;}
     if(action==='slot-delete'){if(!confirm('Delete this slot and its sign-ups?'))return;await eventsApi('slot-delete',{event:route.id,slot:d.slot});await refresh();tell('Slot deleted.');return;}
     if(action==='event-announce'||action==='event-help'){const r=await eventsApi(action==='event-announce'?'announce':'help',{event:route.id});await refresh();tell(r.notice);return;}
+    if(action==='install'){if(installPrompt){installPrompt.prompt();installPrompt=null;}return;}
+    if(action==='install-dismiss'){try{localStorage.setItem('tp-install','no');}catch{}button.closest('section')?.remove();return;}
     if(action==='call-filter'){callFilter=d.kind;callsPage();return;}
     if(action==='interest'){await callsApi('interest',{call:route.id,status:d.status});await refresh();tell(d.status==='none'?'Cleared.':'Saved: '+interestLabels[d.status]+'.');return;}
     if(action==='call-hide'){await callsApi('hide',{call:route.id,hidden:d.hidden==='true'});await refresh();tell('Saved.');return;}
