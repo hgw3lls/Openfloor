@@ -6,6 +6,7 @@ import {links} from '../lib/links.mjs';
 import {group} from '../lib/group.mjs';
 import {posts} from '../lib/posts.mjs';
 import {events} from '../lib/events.mjs';
+import {calls} from '../lib/calls.mjs';
 import {newToken, startSession} from '../lib/auth.mjs';
 
 export const ORIGIN = 'https://floor.test', KEY = 'orgkey';
@@ -58,6 +59,7 @@ export function client(db, mailer, {session, ip = '203.0.113.1'} = {}) {
   return {call, get: (meeting = {}) => call(undefined, undefined, meeting), group: (action = '', payload) => send(group, '/api/group', {action}, payload),
     posts: (action = '', payload, params = {}) => send(postsHandler, '/api/posts', {action, ...params}, payload),
     events: (action = '', payload, params = {}) => send((request, db, key, mailer, defer) => events(request, db, mailer, defer), '/api/events', {action, ...params}, payload),
+    calls: (action = '', payload, params = {}) => send((request, db, key, mailer, defer) => calls(request, db, mailer, defer), '/api/calls', {action, ...params}, payload),
     groupView: view => send(group, '/api/group', {view}, undefined)};
 }
 
