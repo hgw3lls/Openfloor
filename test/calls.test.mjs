@@ -140,3 +140,23 @@ test('discussion on the site and by email reply; deleting removes everything', a
   for (const t of ['calls', 'call_interest', 'comments']) assert.equal((await w.pg.query(`SELECT count(*)::int n FROM ${t}`)).rows[0].n, 0, t);
   assert.equal((await w.pg.query("SELECT count(*)::int n FROM reply_keys WHERE kind='call'")).rows[0].n, 0);
 });
+
+test('calls: who, results and a private application checklist per member', async () => {
+  const w = await world();
+  const C = await share(w, {eligibility: 'Printmakers in the region', results: 'Mid January', needs: 'CV, one page\n\nArtist statement, 300 words\n6 images of recent work\n'});
+  let c = (await w.ben.calls('', undefined, {call: C})).body.call;
+  assert.deepEqual([c.eligibility, c.results, c.needs, c.myChecks], ['Printmakers in the region', 'Mid January', ['CV, one page', 'Artist statement, 300 words', '6 images of recent work'], []]);
+  assert.equal((await w.ben.calls('check', {call: C, item: 0, done: true})).status, 200);
+  await w.ben.calls('check', {call: C, item: 2, done: true});
+  assert.equal((await w.ben.calls('check', {call: C, item: 5, done: true})).status, 400);
+  assert.deepEqual((await w.ben.calls('', undefined, {call: C})).body.call.myChecks, [0, 2]);
+  assert.deepEqual((await w.ana.calls('', undefined, {call: C})).body.call.myChecks, [], 'private to each member');
+  await w.ben.calls('check', {call: C, item: 0, done: false});
+  assert.deepEqual((await w.ben.calls('', undefined, {call: C})).body.call.myChecks, [2]);
+  await w.ana.calls('update', {call: C, results: 'February'});
+  assert.deepEqual((await w.ben.calls('', undefined, {call: C})).body.call.myChecks, [2], 'other edits keep checklists');
+  await w.ana.calls('update', {call: C, needs: 'CV\nStatement'});
+  assert.deepEqual((await w.ben.calls('', undefined, {call: C})).body.call.myChecks, [], 'a new list starts afresh');
+  await w.org.group('features', {calls: 'view'});
+  assert.equal((await w.ben.calls('check', {call: C, item: 0, done: true})).status, 403);
+});
