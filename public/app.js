@@ -8,6 +8,7 @@ if(isId(parts[0])){route.page='meeting';route.id=parts[0];if(parts[1]==='manage'
 else if(parts[0]==='event'&&isId(parts[1])){route.page='event';route.id=parts[1];route.manage=parts[2]==='manage';route.view=parts[2]==='view';}
 else if(parts[0]==='post'&&isId(parts[1])){route.page='post';route.id=parts[1];}
 else if(parts[0]==='call'&&isId(parts[1])){route.page='call';route.id=parts[1];}
+else if(parts[0]==='proposal'&&isId(parts[1])){route.page='proposal';route.id=parts[1];}
 else if(['organize','members','decisions','events','me','calls','meetings','board','settings','group'].includes(parts[0]))route.page=parts[0];
 
 const categories=['Discussion','Decision','Update'];
@@ -53,6 +54,7 @@ const groupApi=(action='',payload,params={})=>request('/api/group',{action,...pa
 const postsApi=(action='',payload,params={})=>request('/api/posts',{action,...params},payload);
 const eventsApi=(action='',payload,params={})=>request('/api/events',{action,...params},payload);
 const callsApi=(action='',payload,params={})=>request('/api/calls',{action,...params},payload);
+const proposalsApi=(action='',payload,params={})=>request('/api/proposals',{action,...params},payload);
 
 function hero(title,subtitle,badge='',extra=''){
   return '<section class="hero">'+(badge?'<span class="mono phase">'+badge+'</span>':'')+'<h1>'+esc(title)+'</h1>'+(subtitle?'<p>'+esc(subtitle)+'</p>':'')+extra+'</section>';
@@ -331,6 +333,13 @@ function buildDeck(){
     deck.push({key:'s:'+s.id,type:'slot',id:s.id,kind:'Help wanted · '+dueLike(s.startsAt),title:s.label+' · '+s.eventTitle,
       detail:(s.timed?s.when+'. ':'')+(s.people.length?s.people.join(', ')+' signed up, '+need+' more needed.':'Nobody yet, '+need+' needed.'),choices:[['claim','Sign me up'],['skip','Not this time']]});
   }
+  if(can('proposals')){
+    for(const p of (group.proposals?.open||[]).filter(p=>!p.myVote))
+      deck.push({key:'p:'+p.id,type:'pvote',id:p.id,kind:'Vote · P-'+p.number+' · closes '+closesLabel(p.closesAt),title:p.title,
+        detail:[p.figure,p.summary].filter(Boolean).join(' — ').slice(0,160)||'Proposed by '+p.author+'.',choices:[['for','For'],['against','Against'],['abstain','Abstain']]});
+    for(const p of (group.proposals?.drafts||[]).filter(p=>!p.mine&&!skip.has('d:'+p.id)))
+      deck.push({key:'d:'+p.id,type:'second',id:p.id,kind:'Proposal · needs a seconder',title:p.title,detail:'Proposed by '+(p.author||'a member')+'. Seconding opens it for everyone to vote.',choices:[['second','Second it'],['skip','Not now']]});
+  }
   if(can('calls'))for(const c of (group.openCalls||[]).filter(c=>!c.myStatus&&!skip.has('c:'+c.id)).slice(0,3)){
     const left=daysUntil(c.deadline);
     deck.push({key:'c:'+c.id,type:'call',id:c.id,kind:'Open call · '+(left===0?'due today':left===1?'1 day left':left+' days left'),title:c.title,
@@ -392,6 +401,8 @@ function indexItems(){
       meta:c.myStatus?'You: '+interestLabels[c.myStatus]+(c.applying?' · '+c.applying+' from the group applying':''):[c.organization,c.award].filter(Boolean).join(' · ')||'Open call',mine:!!c.myStatus,
       ...(toggle?{act:c.myStatus?'Interested ✓':'I’m interested',on:!!c.myStatus,action:'w-interest',data:{call:c.id,status:c.myStatus?'none':'interested'}}:{})});
   }
+  if(shown('proposals'))for(const p of group.proposals?.open||[])
+    items.push({date:new Date(p.closesAt),kind:'Vote closes · P-'+p.number,title:p.title,href:'#proposal/'+p.id,meta:(p.myVote?'You: '+({for:'For',against:'Against',abstain:'Abstain'})[p.myVote]+' · ':'')+p.counts.for+' for · '+p.counts.against+' against'+(p.quorumMet?' · quorum met':''),mine:!!p.myVote||p.mine});
   for(const a of group.myActions||[]){
     const done=wallDone.has(a.id);
     items.push({date:a.due?deadlineDate(a.due):null,kind:'Action item',title:a.title,href:'#'+a.meeting+(organizer()?'/view':''),meta:(overdue(a)&&!done?'Overdue · ':'')+'From '+a.meetingTitle,mine:true,done,
@@ -472,6 +483,8 @@ async function wallAnswer(c,value,reason){
   else if(c.type==='vote')await api('vote',{topic:c.id,value:Number(value)},c.meeting);
   else if(value==='skip')dismiss(c.key);
   else if(c.type==='slot')await eventsApi('claim',{slot:c.id});
+  else if(c.type==='pvote')await proposalsApi('vote',{proposal:c.id,vote:value});
+  else if(c.type==='second')await proposalsApi('second',{proposal:c.id});
   else if(c.type==='call')await callsApi('interest',{call:c.id,status:'interested'});
   return true;
 }
@@ -496,6 +509,8 @@ async function wallClick(action,d){
 }
 async function wallSubmit(kind,fields){
   if(kind==='w-reason'){if(await wallAnswer(wallDeck[wallAt],'no',fields.reason))await wallNext();return true;}
+  if(kind==='n-propose'){const r=await proposalsApi('create',fields);proposing=false;location.hash='proposal/'+r.id;return true;}
+  if(kind==='n-proposal-update'){await proposalsApi('update',{...fields,proposal:route.id});await refresh();tell('Saved.');return true;}
   if(kind==='n-signin'){await groupApi('signin',{email:fields.email});signAddr=fields.email.trim();signStep='code';signCode='';welcome();tell('If that address is on the member list, a code is on its way.');return true;}
   if(kind==='n-rsvp-no'){await api('rsvp',{status:'no',reason:fields.reason},meeting.id);meeting.rsvpReason=false;await reloadMeeting();tell('Saved: Can’t make it.');return true;}
   if(kind==='w-sheet-reason'){await api('rsvp',{status:'no',reason:fields.reason},wallSheet.meeting);wallReason=false;await wallReload();tell('Saved: Can’t make it.');return true;}
@@ -505,7 +520,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&wallSheet&&document
 
 /* Pages that used to live on the dashboard */
 /* Night screens: every member page in the 5A "Night index" language. */
-const nightPages=new Set(['home','me','meetings','meeting','events','event','calls','call','settings','group','board','post','decisions','welcome']);
+const nightPages=new Set(['proposal','home','me','meetings','meeting','events','event','calls','call','settings','group','board','post','decisions','welcome']);
 function brandRow(){
   const me=group?.me;
   return '<div class="w-brand"><a class="w-mark" href="'+(organizer()?'#me':'/')+'">Tower Press <em>Artist Group</em></a><span class="w-right">'+(realOrganizer()&&!preview?'<a class="w-org" href="/">Organizer</a>':'')+(me?'<a class="w-avatar" href="#settings" aria-label="You">'+esc(initials(me))+'</a>':'')+'</span></div>';
@@ -776,25 +791,95 @@ function decisionsPage(){
   const q=(document.querySelector('#search')?.value||'').trim().toLowerCase();
   const kinds=[...new Set(decisionsData.flatMap(m=>m.agenda.map(a=>a.kind)))];
   let n=decisionsData.reduce((t,m)=>t+m.agenda.length,0);
-  const rows=decisionsData.map(m=>{
+  const closedP=(shown('proposals')?proposalData.closed:[]).filter(p=>(!decFilter||decFilter==='proposals')&&(!q||(p.title+' '+p.summary).toLowerCase().includes(q)));
+  const pRow=p=>{const d=new Date(p.closedAt);return {d,html:'<div class="w-row"><div class="w-day"><span>'+pad2(d.getDate())+'</span><span class="lime">'+esc(monShort(d)+' '+String(d.getFullYear()).slice(2))+'</span></div><div class="w-items"><div class="w-item'+(p.status==='carried'?'':' n-lost')+'"><span class="eyebrow lime">P-'+p.number+' — '+esc(p.kind)+'</span><a class="w-ititle" href="#proposal/'+p.id+'">'+esc(p.title)+'</a><span class="w-meta">'+esc(resultText(p))+' · '+p.counts.for+'–'+p.counts.against+(p.counts.abstain?' · '+p.counts.abstain+' abstain':'')+'</span></div></div></div>'};};
+  const rows0=decisionsData.map(m=>{
     const d=m.startsAt?new Date(m.startsAt):null;
-    const items=m.agenda.map(a=>({...a,num:n--})).filter(a=>(!decFilter||a.kind===decFilter)&&(!q||(a.label+' '+a.detail+' '+m.title).toLowerCase().includes(q)));
-    const notes=(!decFilter||decFilter==='notes')&&m.notes&&(!q||m.notes.toLowerCase().includes(q)||m.title.toLowerCase().includes(q));
+    const items=m.agenda.map(a=>({...a,num:n--})).filter(a=>(!decFilter||a.kind===decFilter)&&decFilter!=='proposals'&&(!q||(a.label+' '+a.detail+' '+m.title).toLowerCase().includes(q)));
+    const notes=(!decFilter||decFilter==='notes')&&decFilter!=='proposals'&&m.notes&&(!q||m.notes.toLowerCase().includes(q)||m.title.toLowerCase().includes(q));
     if(!items.length&&!notes)return '';
     return '<div class="w-row"><div class="w-day"><span>'+(d?pad2(d.getDate()):'—')+'</span><span class="lime">'+(d?esc(monShort(d)+' '+String(d.getFullYear()).slice(2)):'')+'</span></div><div class="w-items">'+
       items.map(a=>'<div class="w-item"><span class="eyebrow lime">D-'+a.num+' — '+esc(a.kind)+'</span><a class="w-ititle" href="#'+m.id+(organizer()?'/view':'')+'">'+esc(a.label)+'</a><span class="w-meta">'+esc(m.title)+' · '+a.minutes+' min</span></div>').join('')+
       (notes?'<div class="w-item"><span class="eyebrow lime">Notes</span><span class="n-notes small flush">'+para(m.notes)+'</span></div>':'')+'</div></div>';
-  }).join('');
+  });
+  const merged=[...decisionsData.map((m,i)=>({d:m.startsAt?new Date(m.startsAt):new Date(0),html:rows0[i]})),...closedP.map(pRow)].sort((a,b)=>b.d-a.d);
+  const rows=merged.map(r=>r.html).join('');
   const results=document.querySelector('#results');
   if(results){results.innerHTML=rows||'<p class="w-none">Nothing matches.</p>';return;}
-  const total=decisionsData.reduce((t,m)=>t+m.agenda.length,0);
+  const total=decisionsData.reduce((t,m)=>t+m.agenda.length,0)+(proposalData.closed||[]).length;
   nightPage(backRow('#meetings','Meetings',decisionsData.length+(decisionsData.length===1?' meeting':' meetings'))+titleBlock('What we','decided',[total+' ON','RECORD',decisionsData.length+(decisionsData.length===1?' MEETING':' MEETINGS')])+
+    proposalSection()+
     '<div class="n-search"><label><span class="sr">Search</span><input id="search" type="search" placeholder="Search decisions, topics, people"></label></div>'+
-    '<div class="n-head"><span>The log</span>'+(kinds.length>1?'<div class="w-seg">'+[['','All'],...kinds.map(k=>[k,k]),['notes','Notes']].map(([k,l])=>'<button type="button" data-action="n-dfilter" data-kind="'+esc(k)+'" aria-pressed="'+(decFilter===k)+'">'+esc(l)+'</button>').join('')+'</div>':'')+'</div>'+
+    '<div class="n-head"><span>The log</span>'+(kinds.length>1||proposalData.closed.length?'<div class="w-seg">'+[['','All'],...(shown('proposals')&&proposalData.closed.length?[['proposals','Proposals']]:[]),...kinds.map(k=>[k,k]),['notes','Notes']].map(([k,l])=>'<button type="button" data-action="n-dfilter" data-kind="'+esc(k)+'" aria-pressed="'+(decFilter===k)+'">'+esc(l)+'</button>').join('')+'</div>':'')+'</div>'+
     '<div id="results">'+(rows||'<p class="w-none">No past meetings yet.</p>')+'</div>');
 }
 
+/* Proposals (screens 12 and 13) */
+let proposalData={open:[],drafts:[],closed:[]}, proposal=null, proposalKinds=[], proposing=false;
+const resultText=p=>({carried:'Carried',not_carried:'Not carried',no_quorum:'No quorum'})[p.status]||'';
+const closesLabel=ms=>{const d=new Date(ms);return dowShort(d)+' '+d.getDate()+' '+monShort(d)+', '+clock(d);};
+function tallyBar(p,tone){
+  const N=Math.max(1,p.eligible), f=p.counts.for/N*100, a=p.counts.against/N*100;
+  return '<div class="n-tally '+tone+'"><i style="width:'+f+'%"></i><i class="ag" style="width:'+a+'%"></i></div>'+
+    '<div class="n-tline"><span>'+p.counts.for+' for · '+p.counts.against+' against · '+p.counts.abstain+' abstain</span><span>'+(p.quorumMet?'Quorum met':p.voted+' of '+p.quorum+' to count')+'</span></div>';
+}
+function voteButtons(p,tone){
+  if(!can('proposals')||p.status!=='open')return '';
+  return '<div class="n-status t-'+tone+'">'+Object.entries({for:'For',against:'Against',abstain:'Abstain'}).map(([k,l])=>'<button type="button" class="'+(p.myVote===k?'on':'')+'" data-action="n-pvote" data-proposal="'+p.id+'" data-vote="'+(p.myVote===k?'none':k)+'" aria-pressed="'+(p.myVote===k)+'">'+l+'</button>').join('')+'</div>';
+}
+function proposalPoster(p,i){
+  const tone=i%2?'purple':'lime';
+  return '<div class="n-call '+tone+'"><span class="tape"></span><a class="n-plink" href="#proposal/'+p.id+'"><span class="n-prow"><span class="eyebrow">P-'+p.number+' · '+esc(p.kind)+'</span><span class="eyebrow">'+esc(closesLabel(p.closesAt))+'</span></span><span class="n-ctitle">'+esc(p.title)+'</span>'+(p.figure||p.summary?'<span class="n-cmeta">'+esc([p.figure,p.summary].filter(Boolean).join(' — ').slice(0,180))+'</span>':'')+'</a>'+tallyBar(p,tone)+voteButtons(p,tone)+'</div>';
+}
+function proposalForm(p={}){
+  return '<label>Title<input name="title" required maxlength="140" value="'+esc(p.title||'')+'" placeholder="Shared press maintenance fund"></label>'+
+    '<div class="row"><label>Kind<select name="kind">'+proposalKinds.map(k=>'<option'+((p.kind||'Other')===k?' selected':'')+'>'+k+'</option>').join('')+'</select></label><label>Voting open for<select name="days">'+[3,5,7,10,14,21,30].map(d=>'<option value="'+d+'"'+((p.days||7)===d?' selected':'')+'>'+d+' days</option>').join('')+'</select></label></div>'+
+    '<label>In a few words <small>(optional, shown big)</small><input name="figure" maxlength="40" value="'+esc(p.figure||'')+'" placeholder="£5 a month each"></label>'+
+    '<label>What you propose<textarea name="summary" maxlength="2000" rows="3">'+esc(p.summary||'')+'</textarea></label>'+
+    '<label>Why <small>(optional)</small><textarea name="reason" maxlength="1000" rows="2">'+esc(p.reason||'')+'</textarea></label>'+
+    '<label>If carried <small>(what happens, optional)</small><input name="effect" maxlength="500" value="'+esc(p.effect||'')+'" placeholder="Starts January. Collected with studio rent."></label>';
+}
+function proposalSection(){
+  if(!shown('proposals'))return '';
+  const open=proposalData.open, drafts=proposalData.drafts;
+  const need=open.filter(p=>!p.myVote).length;
+  return sectionHead('Open · vote now',open.length?(can('proposals')&&need?need+' need your vote':open.length+' open'):'')+
+    (open.length?open.map(proposalPoster).join(''):'<p class="w-none">Nothing up for a vote right now.</p>')+
+    (drafts.length?sectionHead('Waiting for a seconder',drafts.length+'')+drafts.map(p=>'<a class="n-row" href="#proposal/'+p.id+'"><span class="n-rowmain"><span class="eyebrow lime">P-'+p.number+' · '+esc(p.kind)+'</span>'+esc(p.title)+'<small>Proposed by '+esc(p.author||'a member')+(p.mine?' (you)':'')+'</small></span><span class="lime">→</span></a>').join(''):'')+
+    (can('proposals')?'<div class="n-pad"><button type="button" class="n-btn" data-action="n-propose">+ Make a proposal</button></div>':'')+
+    (proposing?'<button type="button" class="w-scrim" data-action="n-propose-close" aria-label="Close"></button><form class="w-sheet n-composer n-pform" data-form="n-propose" role="dialog" aria-modal="true" aria-label="Make a proposal"><span class="tape"></span><span class="eyebrow">New proposal · opens for voting once someone seconds it</span>'+proposalForm()+'<div class="w-sfoot"><button type="button" data-action="n-propose-close">Close ✕</button><button class="w-opt on">Put it up</button></div></form>':'');
+}
+// "£5 a month each": the first word big, the rest small beside it (the whole thing smaller if the first word is long).
+function figureHtml(text){
+  const [head,...rest]=text.trim().split(/\s+/);
+  if(head.length>6)return '<span class="n-figure long">'+esc(text)+'</span>';
+  return '<span class="n-figure"><b>'+esc(head)+'</b>'+(rest.length?'<span>'+esc(rest.join(' '))+'</span>':'')+'</span>';
+}
+function proposalPage(){
+  const p=proposal, open=p.status==='open', draft=p.status==='draft';
+  const facts=[['Proposed by',p.author],['Seconded',p.seconder||(draft?'Waiting for a seconder':'')],['If carried',p.effect],['To pass','More For than Against, and '+p.quorum+' of '+p.eligible+' must vote']].filter(([,v])=>v);
+  const counts='<div class="n-counts"><span><b class="lime">'+p.counts.for+'</b>For</span><span><b>'+p.counts.against+'</b>Against</span><span><b class="lav">'+p.counts.abstain+'</b>Abstain</span></div>';
+  const voters=p.voters.map((v,i)=>'<span class="n-av '+(v.vote==='for'?'lime':v.vote==='against'?'paper':'purple')+'" title="'+esc(v.name+': '+({for:'For',against:'Against',abstain:'Abstain'})[v.vote])+'">'+esc(initials({name:v.name}))+'</span>').join('')+p.notVoted.map(n=>'<span class="n-av hollow" title="'+esc(n)+': not voted">'+esc(initials({name:n}))+'</span>').join('');
+  nightPage(backRow('#decisions','Decisions','P-'+p.number+' · '+p.kind)+
+    '<div class="n-poster lime"><span class="tape"></span><span class="eyebrow">'+(open?'Proposal · closes '+esc(closesLabel(p.closesAt)):draft?'Proposal · waiting for a seconder':esc(resultText(p))+' · '+p.counts.for+'–'+p.counts.against)+'</span>'+
+      (p.figure?figureHtml(p.figure):'')+'<span class="w-title">'+esc(p.title)+'</span>'+(p.summary?'<span class="n-detail">'+para(p.summary)+'</span>':'')+'</div>'+
+    (p.reason?'<p class="n-notes">“'+esc(p.reason)+'”</p>':'')+
+    '<div class="n-facts">'+facts.map(([k,v])=>'<div><span class="eyebrow lime">'+k+'</span><span>'+esc(v)+'</span></div>').join('')+'</div>'+
+    (draft&&p.canSecond?'<div class="n-pad"><button type="button" class="n-wide" data-action="n-second">Second this proposal</button><p class="n-hint flush">Seconding opens it for everyone to vote and emails the group.</p></div>':'')+
+    (open&&can('proposals')?sectionHead('Your vote',p.myVote?({for:'For',against:'Against',abstain:'Abstain'})[p.myVote]:'Not voted yet')+voteButtons(p,'ink')+'<p class="n-hint">You can change your vote until it closes. Votes are visible to members.</p>':'')+
+    (!draft?sectionHead(open?'So far':'Result',open?(p.quorumMet?'Quorum met':p.voted+' of '+p.quorum+' to count'):resultText(p))+counts+(voters?'<div class="n-faces">'+voters+'</div>':''):'')+
+    (shown('comments')?sectionHead('Discussion',p.comments.length+'')+'<div class="n-replies">'+(p.comments.length?replyList(p.comments):'<p class="w-none">No replies yet.</p>')+'</div>'+replyBox('proposal',p.id):'')+
+    (p.canEdit&&!preview?'<details class="n-add"><summary>Edit this proposal</summary><form data-form="n-proposal-update">'+proposalForm(p)+'<button>Save</button></form></details>':'')+
+    ((p.canWithdraw||p.canDelete)&&!preview?'<div class="n-danger">'+(p.canWithdraw?'<button type="button" data-action="n-withdraw">Withdraw</button>':'')+(p.canDelete?'<button type="button" data-action="n-pdelete">Delete</button>':'')+'</div>':''));
+}
+
 async function nightClick(action,d,button){
+  if(action==='n-pvote'){await proposalsApi('vote',{proposal:d.proposal,vote:d.vote});if(document.querySelector('.wall:not(.night-page)'))await wallReload();else await refresh();tell(d.vote==='none'?'Vote cleared.':'Vote saved: '+({for:'For',against:'Against',abstain:'Abstain'})[d.vote]+'.');return true;}
+  if(action==='n-second'){await proposalsApi('second',{proposal:route.id});await refresh();tell('Seconded. Voting is open and the group has been emailed.');return true;}
+  if(action==='n-withdraw'){if(!confirm('Withdraw this proposal? Voting stops and it leaves the list.'))return true;await proposalsApi('withdraw',{proposal:route.id});location.hash='decisions';return true;}
+  if(action==='n-pdelete'){if(!confirm('Delete this proposal, its votes and discussion? This can’t be undone.'))return true;await proposalsApi('delete',{proposal:route.id});location.hash='decisions';return true;}
+  if(action==='n-propose'){proposing=true;document.querySelector('#results')?.remove();decisionsPage();document.querySelector('.n-pform input')?.focus();return true;}
+  if(action==='n-propose-close'){proposing=false;document.querySelector('#results')?.remove();decisionsPage();return true;}
   if(action==='n-key'){if(signCode.length<6)await signDigits(signCode+d.key);return true;}
   if(action==='n-del'){signCode=signCode.slice(0,-1);welcome();return true;}
   if(action==='n-change'){signStep='email';signCode='';welcome();return true;}
@@ -820,7 +905,8 @@ async function show(){
   switch(route.page){
     case 'organize': group=await groupApi('',undefined,{view:'organize'}); header(); organize(); return;
     case 'members': members(); return;
-    case 'decisions': decisionsData=(await groupApi('',undefined,{view:'decisions'})).decisions; decisionsPage(); return;
+    case 'decisions': decisionsData=(await groupApi('',undefined,{view:'decisions'})).decisions; if(shown('proposals')){const r=await proposalsApi();proposalKinds=r.kinds;proposalData=r;} document.querySelector('#results')?.remove(); decisionsPage(); return;
+    case 'proposal': {const r=await proposalsApi('',undefined,{proposal:route.id});proposalKinds=r.kinds;proposal=r.proposal;document.title=proposal.title+' · '+group.group;proposalPage();return;}
     case 'events': {const r=await eventsApi();eventKinds=r.kinds;eventList=preview?{upcoming:r.upcoming.filter(e=>!e.hidden),past:r.past.filter(e=>!e.hidden)}:r;eventsPage();return;}
     case 'event': {
       const r=await eventsApi('',undefined,{event:route.id});eventKinds=r.kinds;event=r.event;document.title=event.title+' · '+group.group;

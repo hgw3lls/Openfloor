@@ -66,6 +66,20 @@ On the organizer panel, **What members can use** switches each feature **On**, *
 
 Use **Preview as member** to check what members see.
 
+## Proposals and votes
+
+Any member can make a proposal on **What we decided**. It needs:
+- a title and the kind (Money, Studio, Shows, Members, Other);
+- optionally, a short headline shown big (like "£5 a month each");
+- what's proposed, why, and what happens if it carries;
+- how long voting stays open (3 to 30 days).
+
+It opens for voting once **another member seconds it**, and seconding emails everyone with For / Against / Abstain buttons. Like the other email buttons, they open a confirm page first, so email scanners can't vote. Votes can be changed until the proposal closes, and everyone can see who voted which way.
+
+Members who haven't voted get a reminder a day before it closes. A proposal **counts** if more than half of active members voted (abstaining counts as voting), and it **carries** if more voted For than Against. Results go into the decisions log; proposals that didn't pass are struck through.
+
+Open proposals and ones waiting for a seconder also show up in the wall's "Needs you". The author can edit a proposal until it's seconded, and the author or an organizer can withdraw it. Organizers can delete it. Each proposal has a discussion, and replies to the email go there. The "Proposals and votes" feature switch can make it view-only or turn it off.
+
 ## Events and sign-ups
 
 Any member can add an event (show, opening, workshop, workday, social) on the **Events** page. Events appear on the dashboard, in members' summaries and in everyone's calendar link. Organizers can also email everyone about an event straight away.
