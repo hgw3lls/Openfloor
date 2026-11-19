@@ -21,6 +21,17 @@ Open Floor lets artists submit topics, optionally vote for up to two, and see th
 
 **Topics and voting.** Members suggest topics and vote 👍 or 👎 until the agenda is published, one vote each and never on their own topics. Votes from email count as the same person as votes on the site. Organizers can edit, hide or delete any topic, build the agenda from the top topics, publish it (members get it by email with calendar links), and record and email the outcomes.
 
+## The wall (member home screen)
+
+Members land on **the wall**, a dark "night index" built for phones. It has four sections:
+
+- **A — Needs you** is a stack of decisions answered one at a time: RSVPs to upcoming meetings, topics to vote on, open sign-up slots and new open calls. "Can't make it" asks for a reason, which only organizers see. "Not this time" and "Not for me" hide that slot or call on that device; **Redo** brings them back.
+- **B — Pinned** has posters for the next meeting and the next event. Tap one to RSVP or sign up.
+- **C — Index** lists everything coming up by day: meetings, events, sign-up slots, open-call deadlines and your action items. Each has a one-tap action, and **All / Mine** narrows the list to what involves you.
+- **D — Board** shows the latest posts.
+
+A tab bar (Wall, Meetings, Events, Calls) sits at the bottom of the wall and of every page on phones. The initials in the corner open **You**: email settings, the calendar link, add to phone, and sign out. Organizers reach their wall from **Wall** and get back with **Organizer**. The wall follows the feature switches. Fonts (Geist, Instrument Serif, JetBrains Mono, under the SIL Open Font License) are served from the site.
+
 ## On your phone
 
 The site can be saved to a phone's home screen, where it opens full-screen like an app with the Tower Press icon. Members see an **Add to your phone** panel on their page with the steps: on iPhone, in Safari, use Share → Add to Home Screen; on Android, use the **Install the app** button or Chrome's menu. On iPhone, the home-screen app doesn't share Safari's sign-in. That's why sign-in emails also carry a 6-digit code to type into the app. Each code works once, for 30 minutes, with five tries an hour per address. After that, members stay signed in for a year.

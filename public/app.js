@@ -1,5 +1,5 @@
 /* Tower Press: member pages, a separate organizer panel, and "preview as member". */
-const root=document.querySelector('#app'), status=document.querySelector('#status'), nav=document.querySelector('#nav'), banner=document.querySelector('#banner');
+const root=document.querySelector('#app'), status=document.querySelector('#status'), nav=document.querySelector('#nav'), banner=document.querySelector('#banner'), tabs=document.querySelector('#tabs');
 const isId=v=>/^[a-f0-9-]{36}$/.test(v||'');
 const parts=location.hash.slice(1).split('/');
 const route={page:'home'};
@@ -8,7 +8,7 @@ if(isId(parts[0])){route.page='meeting';route.id=parts[0];if(parts[1]==='manage'
 else if(parts[0]==='event'&&isId(parts[1])){route.page='event';route.id=parts[1];route.manage=parts[2]==='manage';route.view=parts[2]==='view';}
 else if(parts[0]==='post'&&isId(parts[1])){route.page='post';route.id=parts[1];}
 else if(parts[0]==='call'&&isId(parts[1])){route.page='call';route.id=parts[1];}
-else if(['organize','members','decisions','events','me','calls'].includes(parts[0]))route.page=parts[0];
+else if(['organize','members','decisions','events','me','calls','meetings','board','settings'].includes(parts[0]))route.page=parts[0];
 
 const categories=['Discussion','Decision','Update'];
 const repeatLabels={'':'Does not repeat',weekly:'Every week',biweekly:'Every two weeks',monthly:'Every month (same weekday)'};
@@ -17,7 +17,8 @@ const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;
 const para=text=>esc(text).replace(/\n/g,'<br>');
 const trap='<label class="trap" aria-hidden="true">Leave this empty<input name="website" tabindex="-1" autocomplete="off"></label>';
 const options=selected=>categories.map(kind=>'<option'+(selected===kind?' selected':'')+'>'+kind+'</option>').join('');
-const tell=message=>status.textContent=message||'';
+let tellTimer;
+const tell=message=>{status.textContent=message||'';clearTimeout(tellTimer);if(message&&document.body.classList.contains('night'))tellTimer=setTimeout(()=>status.textContent='',4000);};
 const zone=()=>{try{return Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';}catch{return 'UTC';}};
 const zones=()=>{try{return Intl.supportedValuesOf('timeZone');}catch{return ['UTC'];}};
 const zoneSelect=selected=>{const list=zones();if(!list.includes(selected))list.unshift(selected);return '<select name="timezone">'+list.map(z=>'<option'+(z===selected?' selected':'')+'>'+esc(z)+'</option>').join('')+'</select>';};
@@ -58,12 +59,16 @@ function hero(title,subtitle,badge='',extra=''){
 }
 function header(){
   const me=group?.me;
-  if(!me){nav.innerHTML='<a href="/">Sign in</a>';banner.innerHTML='';return;}
-  const link=(href,label,page)=>'<a href="'+href+'"'+(route.page===page?' class="on"':'')+'>'+label+'</a>';
-  const home=organizer()?link('/','Organizer',route.page==='organize'?'organize':'home')+link('#me','Your page','me'):link('/','Meetings',route.page==='me'?'me':'home');
-  nav.innerHTML=home+(shown('events')?link('#events','Events','events'):'')+(shown('calls')?link('#calls','Calls','calls'):'')+link('#decisions','Decisions','decisions')+
+  if(!me){nav.innerHTML='<a href="/">Sign in</a>';banner.innerHTML='';tabs.innerHTML='';return;}
+  const link=(href,label,page,dup)=>'<a href="'+href+'" class="'+(route.page===page?'on':'')+(dup?' dup':'')+'">'+label+'</a>';
+  const wallHref=organizer()?'#me':'/', onWall=organizer()?route.page==='me':route.page==='home'||route.page==='me';
+  const home=(organizer()?link('/','Organizer',route.page==='organize'?'organize':'home'):'')+link(wallHref,'Wall',onWall?route.page:'-','dup')+link('#meetings','Meetings','meetings','dup');
+  nav.innerHTML=home+(shown('events')?link('#events','Events','events',1):'')+(shown('calls')?link('#calls','Calls','calls',1):'')+(shown('posts')?link('#board','Board','board'):'')+link('#decisions','Decisions','decisions')+
     '<span class="who">'+esc(me.name||me.email)+'</span>'+
     (realOrganizer()?'<button type="button" class="alt" data-action="preview">'+(preview?'Exit preview':'Preview as member')+'</button>':'');
+  const tab=(href,label,on)=>'<a href="'+href+'"'+(on?' class="on" aria-current="page"':'')+'>'+label+'</a>';
+  tabs.innerHTML=tab(wallHref,'Wall',onWall)+tab('#meetings','Meetings',route.page==='meetings'||route.page==='meeting')+(shown('events')?tab('#events','Events',route.page==='events'||route.page==='event'):'')+(shown('calls')?tab('#calls','Calls',route.page==='calls'||route.page==='call'):'');
+  tabs.style.gridTemplateColumns='repeat('+tabs.children.length+',1fr)';
   banner.innerHTML=preview?'You’re previewing the site as a regular member. <button type="button" data-action="preview">Exit preview</button>':'';
 }
 function orgbar(label,href){
@@ -104,21 +109,6 @@ function meetingCard(m){
 function eventCard(e){
   const open=e.spots-e.taken;
   return '<a class="card" href="#event/'+e.id+(organizer()&&route.page!=='events'?'/view':'')+'"><span class="mono"><span class="tag">'+esc(e.kind)+'</span>'+(e.signedUp?'<span class="chip rsvp-yes">You’re helping</span>':'')+(open>0?'<span class="chip todo">'+open+(open===1?' spot':' spots')+' open</span>':'')+(e.hidden?'<span>hidden</span>':'')+'</span><strong>'+esc(e.title)+'</strong><span class="muted">'+esc(e.when)+(e.location?' · '+esc(e.location):'')+'</span></a>';
-}
-function dashboard(){
-  const me=group.me;
-  root.innerHTML=hero(group.group,'Hi'+(me.name?', '+me.name:'')+'.')+
-    orgbar('Back to the organizer panel','/')+
-    (group.myActions?.length?'<section class="panel"><h2>Your action items</h2><ul class="subs">'+group.myActions.map(a=>actionRow(a,{showMeeting:true,canDone:true})).join('')+'</ul></section>':'')+
-    (group.mySlots?.length?'<section class="panel"><h2>Your sign-ups</h2><ul class="subs">'+group.mySlots.map(s=>'<li><span><strong>'+esc(s.label)+'</strong> <span class="muted">'+esc(s.when)+' · <a href="#event/'+s.event+(organizer()?'/view':'')+'">'+esc(s.eventTitle)+'</a></span></span></li>').join('')+'</ul></section>':'')+
-    '<section class="panel"><h2>Upcoming meetings</h2>'+(group.meetings.upcoming.length?group.meetings.upcoming.map(meetingCard).join(''):'<p class="muted">No meetings scheduled yet.</p>')+'</section>'+
-    (shown('events')?'<section class="panel"><h2>Coming up</h2>'+(group.comingUp?.length?group.comingUp.map(eventCard).join(''):'<p class="muted">No events yet.</p>')+'<p><a href="#events">'+(can('events')?'All events, and add your own →':'All events →')+'</a></p></section>':'')+
-    (shown('calls')?'<section class="panel"><h2>Deadlines coming up</h2>'+(group.deadlines?.length?group.deadlines.map(callCard).join(''):'<p class="muted">No open calls yet.</p>')+'<p><a href="#calls">'+(can('calls')?'All open calls, and share one →':'All open calls →')+'</a></p></section>':'')+
-    (shown('posts')?'<section class="panel"><h2>Posts</h2><p class="muted">Announcements, questions and news for the group. Everyone gets them by email and can reply from their inbox.</p>'+
-      (postList.length?postList.map(p=>'<a class="card" href="#post/'+p.id+'"><strong>'+(p.pinned?'📌 ':'')+esc(p.title)+'</strong><span class="muted">'+esc(p.author)+' · '+ago(p.created)+(p.replies?' · '+p.replies+(p.replies===1?' reply':' replies'):'')+(p.hidden?' · hidden':'')+'</span>'+(p.excerpt?'<span>'+esc(p.excerpt)+(p.excerpt.length>=240?'…':'')+'</span>':'')+'</a>').join(''):'<p class="muted">No posts yet.</p>')+
-      (can('posts')?'<details class="draft"><summary>Write a post</summary><form data-form="post"><label>Title<input name="title" required maxlength="140"></label><label>Message<textarea name="body" maxlength="6000" rows="6"></textarea></label><button>Post to the group</button></form></details>':'')+'</section>':'')+
-    (group.meetings.past.length?'<section class="panel"><h2>Past meetings</h2>'+group.meetings.past.map(meetingCard).join('')+'</section>':'')+
-    installPanel()+calendarPanel()+settingsForm(me);
 }
 /* Save to the phone's home screen */
 let installPrompt=null;
@@ -387,7 +377,224 @@ function asMember(m){
   return {...m,admin:false,topics:m.topics.filter(t=>!t.hidden).map(t=>counts?t:{...t,up:null,down:null,votes:null}),
     attendance:{going:m.attendance.going,maybe:m.attendance.maybe}};
 }
+/* The wall: the member home screen ("Night index"). A — Needs you, B — Pinned, C — Index. */
+let wallDeck=[], wallAt=0, wallReason=false, wallSheet=null, wallDone=new Set();
+let wallMine=false;try{wallMine=localStorage.getItem('tp-mine')==='1';}catch{}
+const dismissed=()=>{try{return JSON.parse(localStorage.getItem('tp-dismissed')||'[]');}catch{return [];}};
+const dismiss=key=>{try{localStorage.setItem('tp-dismissed',JSON.stringify([...dismissed(),key].slice(-200)));}catch{}};
+const pad2=n=>String(n).padStart(2,'0');
+const dayKey=d=>d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());
+const dowShort=d=>d.toLocaleDateString('en-GB',{weekday:'short'});
+const monShort=d=>d.toLocaleDateString('en-GB',{month:'short'});
+const clock=d=>d.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'});
+const deadlineDate=s=>new Date(s+'T12:00:00');
+const daysUntil=s=>Math.round((Date.parse(s+'T00:00:00Z')-Date.parse(new Date().toISOString().slice(0,10)+'T00:00:00Z'))/86400000);
+const initials=me=>(me.name||me.email).split(/[\s@._-]+/).filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join('')||'?';
+function isoWeek(d){const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));const day=t.getUTCDay()||7;t.setUTCDate(t.getUTCDate()+4-day);const y=new Date(Date.UTC(t.getUTCFullYear(),0,1));return Math.ceil(((t-y)/86400000+1)/7);}
+const peopleText=s=>s.people.length?esc(s.people.join(', '))+' · '+s.people.length+' of '+s.capacity:'Nobody yet · 0 of '+s.capacity;
+
+// A — the decisions waiting for this member, in a fixed order for this visit.
+function buildDeck(){
+  const skip=new Set(dismissed()), deck=[];
+  for(const m of group.meetings.upcoming.filter(m=>!m.mine&&m.startsAt))
+    deck.push({key:'m:'+m.id,type:'rsvp',id:m.id,kind:'Meeting · '+dueLike(m.startsAt),title:m.title,
+      detail:[clock(new Date(m.startsAt))+(m.location?' at '+m.location:''),m.going+' going'+(m.topics?', '+m.topics+(m.topics===1?' topic':' topics')+' on the table':'')].join('. ')+'.',
+      choices:[['yes','Going'],['maybe','Maybe'],['no','Can’t make it']]});
+  const topics=group.topics||[];
+  topics.forEach((t,i)=>deck.push({key:'t:'+t.id,type:'vote',id:t.id,meeting:t.meeting,kind:'Topic vote · '+(i+1)+' of '+topics.length,title:t.label,
+    detail:(t.detail?t.detail+' ':'')+'For '+t.meetingTitle+'. Make time for it?',choices:[['1','Yes, discuss'],['-1','Not now']]}));
+  if(can('signups'))for(const s of (group.slots||[]).filter(s=>!s.mine&&s.people.length<s.capacity&&!skip.has('s:'+s.id)).slice(0,3)){
+    const need=s.capacity-s.people.length;
+    deck.push({key:'s:'+s.id,type:'slot',id:s.id,kind:'Help wanted · '+dueLike(s.startsAt),title:s.label+' · '+s.eventTitle,
+      detail:(s.timed?s.when+'. ':'')+(s.people.length?s.people.join(', ')+' signed up, '+need+' more needed.':'Nobody yet, '+need+' needed.'),choices:[['claim','Sign me up'],['skip','Not this time']]});
+  }
+  if(can('calls'))for(const c of (group.openCalls||[]).filter(c=>!c.myStatus&&!skip.has('c:'+c.id)).slice(0,3)){
+    const left=daysUntil(c.deadline);
+    deck.push({key:'c:'+c.id,type:'call',id:c.id,kind:'Open call · '+(left===0?'due today':left===1?'1 day left':left+' days left'),title:c.title,
+      detail:[c.organization,c.award].filter(Boolean).join(', ')+(c.organization||c.award?'. ':'')+(c.applying?c.applying+' from the group applying.':'Nobody from the group is on it yet.'),
+      choices:[['interested','I’m interested'],['skip','Not for me']]});
+  }
+  return deck;
+}
+const dueLike=iso=>{const d=new Date(iso);return dowShort(d)+' '+d.getDate()+' '+monShort(d);};
+
+function deckHtml(){
+  const n=wallDeck.length, left=Math.max(0,n-wallAt);
+  const bars=n?'<div class="w-bars" style="grid-template-columns:repeat('+n+',1fr)">'+wallDeck.map((_,i)=>'<span class="'+(i<wallAt?'done':i===wallAt?'now':'')+'"></span>').join('')+'</div>':'';
+  const head='<div class="w-label"><span>A — Needs you</span><span class="lime">'+(left?left+' waiting for you':'Done for now')+'</span></div>'+bars;
+  if(!left)return head+'<div class="w-empty"><span>All caught up.</span><button type="button" data-action="w-redo">Redo</button></div>';
+  const c=wallDeck[wallAt];
+  const body=wallReason
+    ?'<form class="w-reason" data-form="w-reason"><label>Why can’t you make it? <small>(only organizers see this)</small><textarea name="reason" required maxlength="500" rows="2"></textarea></label><div class="w-choices"><button class="fill">Send</button><button type="button" data-action="w-reason-cancel">Cancel</button></div></form>'
+    :'<div class="w-choices">'+c.choices.map(([v,l],i)=>'<button type="button" class="'+(i===0?'fill':'')+'" data-action="w-choose" data-value="'+v+'">'+esc(l)+'</button>').join('')+'</div>';
+  return head+'<div class="w-deck"><div class="w-behind"></div><div class="w-card" id="w-card"><span class="tape"></span><span class="eyebrow">'+esc(c.kind)+'</span><span class="w-title">'+esc(c.title)+'</span><span class="w-detail">'+esc(c.detail)+'</span>'+body+
+    '<div class="w-nav"><button type="button" data-action="w-back"'+(wallAt?'':' class="dim"')+'>← Back</button><button type="button" class="purple" data-action="w-skip">Skip →</button></div></div></div>';
+}
+
+function pinnedHtml(){
+  const m=group.meetings.upcoming.find(x=>x.startsAt), e=shown('events')?(group.upcomingEvents||[])[0]:null;
+  const meetPoster=m?(()=>{const d=new Date(m.startsAt);return '<button type="button" class="w-poster meet" data-action="w-sheet" data-sheet="meet"><span class="tape"></span><span class="eyebrow lime">01 — Meeting</span><span class="num">'+pad2(d.getDate())+'<i>.</i>'+pad2(d.getMonth()+1)+'</span><span class="day">'+esc(dowShort(d)+' '+clock(d))+'</span><span class="chip">'+(m.mine?'You: '+rsvpLabels[m.mine]:'Tap to RSVP')+'</span></button>';})()
+    :'<a class="w-poster meet" href="#meetings"><span class="eyebrow lime">01 — Meeting</span><span class="day">No meeting scheduled yet.</span></a>';
+  let showPoster='';
+  if(e){
+    const words=e.title.split(/\s+/), last=words.pop();
+    const slots=(group.slots||[]).filter(s=>s.event===e.id), mineS=slots.find(s=>s.mine), open=slots.find(s=>s.people.length<s.capacity);
+    const state=mineS?'You: '+mineS.label:open?(open.people.length?esc(open.people.join(', '))+' · '+open.people.length+' of '+open.capacity:esc(open.label)+' · help wanted'):esc(e.when);
+    showPoster='<button type="button" class="w-poster show" data-action="w-sheet" data-sheet="show"><span class="dot"></span><span class="eyebrow">02 — '+esc(e.kind)+'</span><span class="big">'+esc(words.join(' '))+(words.length?' ':'')+'<em>'+esc(last)+'</em></span><span class="state">'+state+'</span></button>';
+  }else if(shown('events'))showPoster='<a class="w-poster show" href="#events"><span class="dot"></span><span class="eyebrow">02 — Events</span><span class="big">Nothing <em>yet</em></span><span class="state">'+(can('events')?'Add an event →':'See events →')+'</span></a>';
+  return '<div class="w-label pad">B — Pinned</div><div class="w-pinned">'+meetPoster+showPoster+'</div>';
+}
+
+function indexItems(){
+  const items=[];
+  for(const m of group.meetings.upcoming){
+    if(!m.startsAt)continue;
+    const d=new Date(m.startsAt);
+    items.push({date:d,kind:'Meeting',title:m.title,href:'#'+m.id+(organizer()?'/view':''),meta:[clock(d),m.location,m.going+' going'].filter(Boolean).join(' · '),mine:!!m.mine&&m.mine!=='no',
+      act:m.mine?'You: '+rsvpLabels[m.mine]:'I’m going',on:!!m.mine,action:m.mine?'w-sheet':'w-rsvp',data:m.mine?{sheet:'meet',meeting:m.id}:{meeting:m.id}});
+  }
+  if(shown('events'))for(const e of group.upcomingEvents||[]){
+    const d=new Date(e.startsAt);
+    items.push({date:d,kind:e.kind==='Event'?'Event':'Event · '+e.kind,title:e.title,href:'#event/'+e.id+(organizer()?'/view':''),meta:[clock(d),e.location].filter(Boolean).join(' · '),mine:e.signedUp||e.mine});
+    for(const s of (group.slots||[]).filter(s=>s.event===e.id)){
+      const full=s.people.length>=s.capacity;
+      items.push({date:new Date(s.startsAt),kind:'Sign-up',title:s.label,href:'#event/'+e.id+(organizer()?'/view':''),meta:peopleText(s),mine:s.mine,raw:true,
+        ...(can('signups')&&(s.mine||!full)?{act:s.mine?'Signed up ✓':'Sign me up',on:s.mine,action:s.mine?'w-unclaim':'w-claim',data:{slot:s.id}}:{})});
+    }
+  }
+  if(shown('calls'))for(const c of group.openCalls||[]){
+    const toggle=can('calls')&&(!c.myStatus||c.myStatus==='interested');
+    items.push({date:deadlineDate(c.deadline),kind:'Deadline · '+c.kind,title:c.title,href:'#call/'+c.id,
+      meta:c.myStatus?'You: '+interestLabels[c.myStatus]+(c.applying?' · '+c.applying+' from the group applying':''):[c.organization,c.award].filter(Boolean).join(' · ')||'Open call',mine:!!c.myStatus,
+      ...(toggle?{act:c.myStatus?'Interested ✓':'I’m interested',on:!!c.myStatus,action:'w-interest',data:{call:c.id,status:c.myStatus?'none':'interested'}}:{})});
+  }
+  for(const a of group.myActions||[]){
+    const done=wallDone.has(a.id);
+    items.push({date:a.due?deadlineDate(a.due):null,kind:'Action item',title:a.title,href:'#'+a.meeting+(organizer()?'/view':''),meta:(overdue(a)&&!done?'Overdue · ':'')+'From '+a.meetingTitle,mine:true,done,
+      act:done?'Done ✓':'Mark done',on:done,action:'w-done',data:{item:a.id,meeting:a.meeting,done:String(!done)}});
+  }
+  return items;
+}
+function indexHtml(){
+  const days=new Map(), nodate=[];
+  for(const it of indexItems().filter(it=>!wallMine||it.mine).sort((a,b)=>(a.date??Infinity)-(b.date??Infinity))){
+    if(!it.date){nodate.push(it);continue;}
+    const k=dayKey(it.date);if(!days.has(k))days.set(k,{d:it.date,items:[]});days.get(k).items.push(it);
+  }
+  let n=0;
+  const item=it=>'<div class="w-item"><span class="eyebrow lime">'+pad2(++n)+' — '+esc(it.kind)+'</span><a class="w-ititle'+(it.done?' struck':'')+'" href="'+it.href+'">'+esc(it.title)+'</a><span class="w-meta">'+(it.raw?it.meta:esc(it.meta))+'</span>'+
+    (it.act?'<button type="button" class="w-act'+(it.on?' on':'')+'" data-action="'+it.action+'"'+Object.entries(it.data||{}).map(([k,v])=>' data-'+k+'="'+esc(v)+'"').join('')+'>'+esc(it.act)+'</button>':'')+'</div>';
+  const row=(num,sub,items)=>'<div class="w-row"><div class="w-day"><span>'+num+'</span><span class="lime">'+sub+'</span></div><div class="w-items">'+items.map(item).join('')+'</div></div>';
+  const rows=[...days.values()].map(g=>row(pad2(g.d.getDate()),esc(dowShort(g.d)+' '+monShort(g.d)),g.items)).join('')+(nodate.length?row('—','Any time',nodate):'');
+  return '<div class="w-label pad rule"><span>C — Index</span><div class="w-seg" role="group" aria-label="Show"><button type="button" data-action="w-mine" data-mine="0" aria-pressed="'+!wallMine+'">All</button><button type="button" data-action="w-mine" data-mine="1" aria-pressed="'+wallMine+'">Mine</button></div></div>'+
+    (rows||'<p class="w-none">'+(wallMine?'Nothing of yours coming up.':'Nothing coming up yet.')+'</p>');
+}
+
+function boardHtml(){
+  if(!shown('posts'))return '';
+  const list=postList.slice(0,3);
+  return '<div class="w-label pad rule"><span>D — Board</span><a class="lime" href="#board">'+(can('posts')?'All posts, write one →':'All posts →')+'</a></div>'+
+    (list.length?list.map(p=>'<a class="w-post" href="#post/'+p.id+'"><span class="eyebrow lime">'+(p.pinned?'Pinned · ':'')+esc(p.author)+' · '+ago(p.created)+'</span><strong>'+esc(p.title)+'</strong>'+(p.replies?'<span class="w-meta">'+p.replies+(p.replies===1?' reply':' replies')+'</span>':'')+'</a>').join(''):'<p class="w-none">No posts yet.</p>');
+}
+
+function sheetHtml(){
+  if(!wallSheet)return '';
+  let s;
+  if(wallSheet.type==='meet'){
+    const m=group.meetings.upcoming.find(x=>x.id===wallSheet.meeting)||group.meetings.upcoming.find(x=>x.startsAt);
+    if(!m)return '';
+    const d=new Date(m.startsAt);
+    s={kind:'Meeting · '+dueLike(m.startsAt),title:'Can you make it?',body:[clock(d)+(m.location?', '+m.location:''),m.going+' going'].join('. ')+'.',
+      opts:wallReason?'<form class="w-reason" data-form="w-sheet-reason"><label>Why can’t you make it? <small>(only organizers see this)</small><textarea name="reason" required maxlength="500" rows="2"></textarea></label><button class="w-opt on">Send</button></form>'
+        :Object.entries(rsvpLabels).map(([k,l])=>'<button type="button" class="w-opt'+(m.mine===k?' on':'')+'" data-action="w-sheet-rsvp" data-meeting="'+m.id+'" data-value="'+k+'">'+l+'</button>').join(''),
+      link:'<a href="#'+m.id+(organizer()?'/view':'')+'">Meeting page, topics and agenda →</a>'};
+  }else{
+    const e=(group.upcomingEvents||[])[0];
+    if(!e)return '';
+    const slots=(group.slots||[]).filter(x=>x.event===e.id);
+    s={kind:e.kind+' · '+dueLike(e.startsAt),title:e.title,body:esc(e.when)+(e.location?', '+esc(e.location):'')+'.',
+      opts:slots.length&&can('signups')?slots.map(x=>{const full=x.people.length>=x.capacity&&!x.mine;return '<button type="button" class="w-opt'+(x.mine?' on':'')+'" data-action="'+(x.mine?'w-unclaim':'w-claim')+'" data-slot="'+x.id+'"'+(full?' disabled':'')+'>'+esc(x.label)+' — '+(x.mine?'Signed up ✓':full?'Full':'Sign me up')+'</button>';}).join(''):'',
+      link:'<a href="#event/'+e.id+(organizer()?'/view':'')+'">Event page →</a>'};
+  }
+  return '<button type="button" class="w-scrim" data-action="w-close" aria-label="Close"></button><div class="w-sheet" role="dialog" aria-modal="true" aria-label="'+esc(s.title)+'"><span class="tape"></span><span class="eyebrow">'+esc(s.kind)+'</span><span class="w-stitle">'+esc(s.title)+'</span><span class="w-sbody">'+s.body+'</span><div class="w-opts">'+s.opts+'</div><div class="w-sfoot">'+s.link+'<button type="button" data-action="w-close">Close ✕</button></div></div>';
+}
+
+function wall(){
+  const me=group.me, now=new Date();
+  document.body.classList.add('night');
+  root.innerHTML='<div class="wall">'+
+    '<div class="w-brand"><span class="w-mark">Tower Press <em>Artist Group</em></span><span class="w-right">'+(realOrganizer()&&!preview?'<a class="w-org" href="/">Organizer</a>':'')+'<a class="w-avatar" href="#settings" aria-label="Your settings">'+esc(initials(me))+'</a></span></div>'+
+    '<div class="w-hero"><h1>On the<br><em>wall</em></h1><div class="w-date">'+esc(now.toLocaleDateString('en-GB',{weekday:'short'}).toUpperCase())+'<br>'+pad2(now.getDate())+'.'+pad2(now.getMonth()+1)+'.'+String(now.getFullYear()).slice(2)+'<br><span class="lime">WK '+isoWeek(now)+'</span></div></div>'+
+    '<section aria-label="Needs you" id="w-a">'+deckHtml()+'</section>'+
+    '<section aria-label="Pinned">'+pinnedHtml()+'</section>'+
+    '<section aria-label="Index">'+indexHtml()+'</section>'+
+    '<section aria-label="Board">'+boardHtml()+'</section>'+
+    '<div id="w-sheet">'+sheetHtml()+'</div></div>';
+  if(wallSheet)root.querySelector('.w-sheet button, .w-sheet textarea')?.focus();
+}
+function wallStart(){wallDeck=buildDeck();wallAt=0;wallReason=false;wallSheet=null;wall();}
+async function wallReload(){group=await groupApi();header();if(shown('posts'))postList=(await postsApi()).posts;wall();}
+// Slide the answered card off, then show the next one.
+async function wallNext(){
+  const card=document.querySelector('#w-card');
+  wallReason=false;
+  if(card&&!matchMedia('(prefers-reduced-motion: reduce)').matches){card.classList.add('leaving');await new Promise(r=>setTimeout(r,240));}
+  wallAt++;
+  await wallReload();
+  document.querySelector('#w-card')?.classList.add('entering');
+}
+async function wallAnswer(c,value,reason){
+  if(c.type==='rsvp'){if(value==='no'&&!reason){wallReason=true;wall();document.querySelector('[data-form=w-reason] textarea')?.focus();return false;}await api('rsvp',{status:value,reason:reason||''},c.id);}
+  else if(c.type==='vote')await api('vote',{topic:c.id,value:Number(value)},c.meeting);
+  else if(value==='skip')dismiss(c.key);
+  else if(c.type==='slot')await eventsApi('claim',{slot:c.id});
+  else if(c.type==='call')await callsApi('interest',{call:c.id,status:'interested'});
+  return true;
+}
+async function wallClick(action,d){
+  if(action==='w-choose'){if(await wallAnswer(wallDeck[wallAt],d.value))await wallNext();return true;}
+  if(action==='w-reason-cancel'){wallReason=false;wall();return true;}
+  if(action==='w-skip'){wallAt=Math.min(wallDeck.length,wallAt+1);wallReason=false;wall();return true;}
+  if(action==='w-back'){wallAt=Math.max(0,wallAt-1);wallReason=false;wall();return true;}
+  if(action==='w-redo'){try{localStorage.removeItem('tp-dismissed');}catch{}await wallReload();wallStart();return true;}
+  if(action==='w-mine'){wallMine=d.mine==='1';try{localStorage.setItem('tp-mine',wallMine?'1':'0');}catch{}wall();return true;}
+  if(action==='w-sheet'){wallSheet={type:d.sheet,meeting:d.meeting};wallReason=false;wall();return true;}
+  if(action==='w-close'){wallSheet=null;wallReason=false;wall();return true;}
+  if(action==='w-sheet-rsvp'){
+    if(d.value==='no'){wallReason=true;wallSheet.meeting=d.meeting;wall();return true;}
+    await api('rsvp',{status:d.value,reason:''},d.meeting);await wallReload();tell('Saved: '+rsvpLabels[d.value]+'.');return true;
+  }
+  if(action==='w-rsvp'){await api('rsvp',{status:'yes',reason:''},d.meeting);await wallReload();tell('You’re going.');return true;}
+  if(action==='w-claim'||action==='w-unclaim'){await eventsApi(action==='w-claim'?'claim':'unclaim',{slot:d.slot});await wallReload();tell(action==='w-claim'?'You’re signed up. You’ll get a reminder the day before.':'You’re off that slot.');return true;}
+  if(action==='w-interest'){await callsApi('interest',{call:d.call,status:d.status});await wallReload();tell(d.status==='none'?'Cleared.':'Saved: Interested.');return true;}
+  if(action==='w-done'){await request('/api/meeting',{meeting:d.meeting,action:'action-done'},{action:d.item,done:d.done==='true'});if(d.done==='true')wallDone.add(d.item);else wallDone.delete(d.item);wall();tell(d.done==='true'?'Marked done.':'Reopened.');return true;}
+  return false;
+}
+async function wallSubmit(kind,fields){
+  if(kind==='w-reason'){if(await wallAnswer(wallDeck[wallAt],'no',fields.reason))await wallNext();return true;}
+  if(kind==='w-sheet-reason'){await api('rsvp',{status:'no',reason:fields.reason},wallSheet.meeting);wallReason=false;await wallReload();tell('Saved: Can’t make it.');return true;}
+  return false;
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&wallSheet&&document.body.classList.contains('night')){wallSheet=null;wallReason=false;wall();}});
+
+/* Pages that used to live on the dashboard */
+function meetingsPage(){
+  root.innerHTML=hero('Meetings','RSVP, suggest topics and vote before each meeting.')+
+    '<section class="panel"><h2>Coming up</h2>'+(group.meetings.upcoming.length?group.meetings.upcoming.map(meetingCard).join(''):'<p class="muted">No meetings scheduled yet.</p>')+'</section>'+
+    (group.meetings.past.length?'<section class="panel"><h2>Past meetings</h2>'+group.meetings.past.map(meetingCard).join('')+'</section>':'')+
+    '<p><a href="#decisions">Decisions from past meetings →</a></p>';
+}
+function boardPage(){
+  root.innerHTML=hero('Board','Announcements, questions and news for the group. Everyone gets them by email and can reply from their inbox.')+
+    (can('posts')?'<details class="panel"><summary>Write a post</summary><form data-form="post"><label>Title<input name="title" required maxlength="140"></label><label>Message<textarea name="body" maxlength="6000" rows="6"></textarea></label><button>Post to the group</button></form></details>':'')+
+    '<section class="panel">'+(postList.length?postList.map(p=>'<a class="card" href="#post/'+p.id+'"><strong>'+(p.pinned?'📌 ':'')+esc(p.title)+'</strong><span class="muted">'+esc(p.author)+' · '+ago(p.created)+(p.replies?' · '+p.replies+(p.replies===1?' reply':' replies'):'')+(p.hidden?' · hidden':'')+'</span>'+(p.excerpt?'<span>'+esc(p.excerpt)+(p.excerpt.length>=240?'…':'')+'</span>':'')+'</a>').join(''):'<p class="muted">No posts yet.</p>')+'</section>';
+}
+function settingsPage(){
+  root.innerHTML=hero('You',group.me.name||group.me.email)+installPanel()+calendarPanel()+settingsForm(group.me);
+}
+
 async function show(){
+  document.body.classList.remove('night');
   if(!group.me&&route.page!=='meeting'){welcome();return;}
   if((route.page==='organize'||route.page==='members')&&!organizer()){location.hash='';return;}
   switch(route.page){
@@ -414,10 +621,13 @@ async function show(){
       else meetingView();
       return;
     }
-    case 'me': postList=shown('posts')?(await postsApi()).posts:[]; dashboard(); return;
+    case 'me': postList=shown('posts')?(await postsApi()).posts:[]; wallStart(); return;
+    case 'meetings': meetingsPage(); return;
+    case 'board': postList=shown('posts')?(await postsApi()).posts:[]; boardPage(); return;
+    case 'settings': settingsPage(); return;
     default:
       if(organizer()){route.page='organize';group=await groupApi('',undefined,{view:'organize'});header();organize();return;}
-      postList=shown('posts')?(await postsApi()).posts:[]; dashboard();
+      postList=shown('posts')?(await postsApi()).posts:[]; wallStart();
   }
 }
 async function load(){
@@ -457,6 +667,7 @@ root.addEventListener('submit',ev=>{
   ev.preventDefault();
   const form=ev.target, data=new FormData(form), fields=Object.fromEntries(data), kind=form.dataset.form;
   perform(ev.submitter,async()=>{
+    if(kind?.startsWith('w-')&&await wallSubmit(kind,fields))return;
     let result={};
     switch(kind){
       case 'signin': result=await groupApi('signin',{email:fields.email}); form.outerHTML=codeForm(fields.email); tell(result.notice); document.querySelector('[data-form=code] input[name=code]')?.focus(); return;
@@ -496,11 +707,12 @@ root.addEventListener('click',ev=>{
   if(!button||button.dataset.action==='preview')return;
   const action=button.dataset.action, d=button.dataset;
   perform(button,async()=>{
+    if(action.startsWith('w-')&&await wallClick(action,d))return;
     if(action==='signout'){setPreview(false);await groupApi('signout',{});location.href='/';return;}
     if(action==='copy'){const f=document.querySelector(d.target);f.select();try{await navigator.clipboard.writeText(f.value);tell('Link copied.');}catch{tell('Link selected. Copy it from the field.');}return;}
     if(action==='feed'){
       if(group.feedUrl&&!confirm('Make a new link? The old one will stop working in calendars that use it.'))return;
-      group.feedUrl=(await groupApi('feed',{})).feedUrl;dashboard();tell('Your calendar link is ready.');return;
+      group.feedUrl=(await groupApi('feed',{})).feedUrl;settingsPage();tell('Your calendar link is ready.');return;
     }
     if(['approve','decline','role','remove-member'].includes(action)){
       if(action==='remove-member'&&!confirm('Remove '+d.name+' from the group?'))return;
