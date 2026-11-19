@@ -75,3 +75,21 @@ test('profiles: members set their medium, organizers set role labels; both show 
   await org.group('title', {member: a.id, title: ''});
   assert.equal((await ana.group()).body.me.title, '');
 });
+
+test('In today: check in and out; it lasts 12 hours; shows on the wall and in the directory', async () => {
+  const {db, pg} = await setup();
+  const mailer = fakeMailer();
+  const a = await member(db, 'ana@example.org', {name: 'Ana'});
+  const b = await member(db, 'ben@example.org', {name: 'Ben'});
+  const [ana, ben] = [a, b].map(m => client(db, mailer, {session: m.session}));
+  assert.deepEqual((await ben.group()).body.inToday, []);
+  assert.equal((await ana.group('checkin', {in: true})).status, 200);
+  assert.deepEqual((await ben.group()).body.inToday, [{name: 'Ana', me: false}]);
+  assert.deepEqual((await ana.group()).body.inToday, [{name: 'Ana', me: true}]);
+  assert.deepEqual((await ben.groupView('directory')).body.directory.map(m => [m.name, m.inToday]), [['Ana', true], ['Ben', false]]);
+  await pg.query('UPDATE checkins SET at=$1', [Date.now() - 13 * 3600000]);
+  assert.deepEqual((await ben.group()).body.inToday, [], 'gone after 12 hours');
+  await ana.group('checkin', {in: true});
+  await ana.group('checkin', {in: false});
+  assert.deepEqual((await ben.group()).body.inToday, [], 'checked out');
+});

@@ -44,6 +44,10 @@ Every member screen uses the same "night index" design:
 
 A tab bar (Wall, Meetings, Events, Calls) sits at the bottom of the wall and of every page on phones. The initials in the corner open **You**: email settings, the calendar link, add to phone, and sign out. Organizers reach their wall from **Wall** and get back with **Organizer**. The wall follows the feature switches. Fonts (Geist, Instrument Serif, JetBrains Mono, under the SIL Open Font License) are served from the site.
 
+## In the studio today
+
+Under the wall's title, "In the studio today" shows who's in. Tap **I'm in today** to add yourself, on the wall or on your You page. You show as "In today" in the members directory, which has an **In today** filter. It clears itself after 12 hours, or when you tap again.
+
 ## On your phone
 
 The site can be saved to a phone's home screen, where it opens full-screen like an app with the Tower Press icon. Members see an **Add to your phone** panel on their page with the steps: on iPhone, in Safari, use Share → Add to Home Screen; on Android, use the **Install the app** button or Chrome's menu. On iPhone, the home-screen app doesn't share Safari's sign-in. That's why sign-in emails also carry a 6-digit code to type into the app. Each code works once, for 30 minutes, with five tries an hour per address. After that, members stay signed in for a year.

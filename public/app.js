@@ -455,12 +455,18 @@ function sheetHtml(){
   return '<button type="button" class="w-scrim" data-action="w-close" aria-label="Close"></button><div class="w-sheet" role="dialog" aria-modal="true" aria-label="'+esc(s.title)+'"><span class="tape"></span><span class="eyebrow">'+esc(s.kind)+'</span><span class="w-stitle">'+esc(s.title)+'</span><span class="w-sbody">'+s.body+'</span><div class="w-opts">'+s.opts+'</div><div class="w-sfoot">'+s.link+'<button type="button" data-action="w-close">Close ✕</button></div></div>';
 }
 
+function inTodayStrip(){
+  const list=group.inToday||[], mine=list.some(p=>p.me), others=list.filter(p=>!p.me);
+  return '<div class="n-intoday"><a href="#group"><span class="eyebrow lime">In the studio today</span><span>'+(list.length?esc(list.map(p=>p.me?'You':p.name).join(', ')):'Nobody yet')+'</span></a>'+
+    '<button type="button" class="n-btn'+(mine?' on':'')+'" data-action="n-checkin" data-in="'+!mine+'" aria-pressed="'+mine+'">'+(mine?'In today ✓':'I’m in today')+'</button></div>';
+}
 function wall(){
   const me=group.me, now=new Date();
   document.body.classList.add('night');
   root.innerHTML='<div class="wall">'+
     '<div class="w-brand"><span class="w-mark">Tower Press <em>Artist Group</em></span><span class="w-right">'+(realOrganizer()&&!preview?'<a class="w-org" href="/">Organizer</a>':'')+'<a class="w-avatar" href="#settings" aria-label="Your settings">'+esc(initials(me))+'</a></span></div>'+
     '<div class="w-hero"><h1>On the<br><em>wall</em></h1><div class="w-date">'+esc(now.toLocaleDateString('en-GB',{weekday:'short'}).toUpperCase())+'<br>'+pad2(now.getDate())+'.'+pad2(now.getMonth()+1)+'.'+String(now.getFullYear()).slice(2)+'<br><span class="lime">WK '+isoWeek(now)+'</span></div></div>'+
+    inTodayStrip()+
     '<section aria-label="Needs you" id="w-a">'+deckHtml()+'</section>'+
     '<section aria-label="Pinned">'+pinnedHtml()+'</section>'+
     '<section aria-label="Index">'+indexHtml()+'</section>'+
@@ -686,14 +692,14 @@ function callPage(){
 let directory=[], memberFilter='', memberQuery='';
 function directoryPage(){
   const q=memberQuery.trim().toLowerCase();
-  const list=directory.filter(m=>(!memberFilter||(memberFilter==='organizer'?m.role==='organizer':m.title===memberFilter))&&(!q||(m.name+' '+m.medium+' '+m.title).toLowerCase().includes(q)));
+  const list=directory.filter(m=>(!memberFilter||(memberFilter==='organizer'?m.role==='organizer':memberFilter==='in'?m.inToday:m.title===memberFilter))&&(!q||(m.name+' '+m.medium+' '+m.title).toLowerCase().includes(q)));
   const since=directory.reduce((y,m)=>Math.min(y,new Date(m.since).getFullYear()),new Date().getFullYear());
-  const rows=list.map((m,i)=>'<div class="n-person big">'+avatar(m.name,i)+'<span><strong>'+esc(m.name)+(m.me?' (you)':'')+'</strong><small>'+esc(m.medium||'Member since '+new Date(m.since).getFullYear())+'</small></span><span class="n-tags">'+(m.title?'<span class="eyebrow lime">'+esc(m.title)+'</span>':'')+(m.role==='organizer'?'<span class="eyebrow">Organizer</span>':'')+'</span></div>').join('');
+  const rows=list.map((m,i)=>'<div class="n-person big">'+avatar(m.name,i)+'<span><strong>'+esc(m.name)+(m.me?' (you)':'')+'</strong><small>'+esc(m.medium||'Member since '+new Date(m.since).getFullYear())+'</small></span><span class="n-tags">'+(m.title?'<span class="eyebrow lime">'+esc(m.title)+'</span>':'')+(m.role==='organizer'?'<span class="eyebrow">Organizer</span>':'')+(m.inToday?'<span class="eyebrow">In today</span>':'')+'</span></div>').join('');
   const box=document.querySelector('#n-dir');
   if(box){box.innerHTML=rows||'<p class="w-none">Nobody matches.</p>';return;}
   nightPage(backRow('#settings','You',directory.length+' members')+titleBlock('The','group',['SINCE',String(since),'EST.'])+
     '<div class="n-search"><label><span class="sr">Find someone</span><input id="n-q" type="search" placeholder="Find someone or a technique" value="'+esc(memberQuery)+'"></label></div>'+
-    '<div class="n-chips">'+[['','All'],...[...new Set(directory.map(m=>m.title).filter(Boolean))].map(t=>[t,t]),['organizer','Organizers']].map(([k,l])=>'<button type="button" class="'+(memberFilter===k?'on':'')+'" data-action="n-mfilter" data-role="'+k+'">'+l+'</button>').join('')+'</div>'+
+    '<div class="n-chips">'+[['','All'],...[...new Set(directory.map(m=>m.title).filter(Boolean))].map(t=>[t,t]),['organizer','Organizers'],['in','In today']].map(([k,l])=>'<button type="button" class="'+(memberFilter===k?'on':'')+'" data-action="n-mfilter" data-role="'+k+'">'+l+'</button>').join('')+'</div>'+
     '<div id="n-dir" class="n-rule">'+(rows||'<p class="w-none">Nobody matches.</p>')+'</div>');
 }
 function settingsPage(){
@@ -711,7 +717,8 @@ function settingsPage(){
     '<div class="n-poster lime n-profile"><span class="tape"></span><span class="n-av purple huge">'+esc(initials(me))+'</span><span><span class="w-title">'+esc(me.name||me.email.split('@')[0])+'</span><em class="n-org">'+esc(me.medium||(me.role==='organizer'?'Organizer':'Member'))+'</em><span class="eyebrow">'+esc([me.title,me.role==='organizer'&&me.medium?'Organizer':'','Member since '+new Date(me.since||Date.now()).getFullYear()].filter(Boolean).join(' · '))+'</span><span class="eyebrow">'+esc(me.email)+'</span></span></div>'+
     sectionHead('You’re down for',down.length+(down.length===1?' thing':' things'))+
     (down.length?down.map(x=>'<a class="n-row" href="'+x.h+'"><span class="n-day"><b>'+(x.d?pad2(x.d.getDate()):'—')+'</b><span class="lime">'+(x.d?esc(monShort(x.d)):'Any')+'</span></span><span class="n-rowmain"><span class="eyebrow lime">'+esc(x.k)+'</span>'+esc(x.t)+'</span></a>').join(''):'<p class="w-none">Nothing yet. Answer a few things on the wall.</p>')+
-    '<a class="n-row" href="#group"><span class="n-rowmain">Members directory<small>Who’s in the group</small></span><span class="lime">→</span></a>'+
+    '<div class="n-row"><span class="n-rowmain">In the studio today?<small>Shows you as “In today” for 12 hours</small></span>'+(()=>{const mine=(group.inToday||[]).some(p=>p.me);return '<button type="button" class="n-btn'+(mine?' on':'')+'" data-action="n-checkin" data-in="'+!mine+'" aria-pressed="'+mine+'">'+(mine?'In today ✓':'I’m in today')+'</button>';})()+'</div>'+
+    '<a class="n-row" href="#group"><span class="n-rowmain">Members directory<small>Who’s in the group'+((group.inToday||[]).length?' · '+group.inToday.length+' in today':'')+'</small></span><span class="lime">→</span></a>'+
     '<form data-form="profile">'+sectionHead('Email me')+'<fieldset class="n-fs"><legend class="sr">Email</legend>'+
       opt('instant','Everything right away','Each post and reply as it happens')+opt('daily','Daily summary','One email a day with what’s new')+opt('weekly','Weekly summary','One email on Mondays')+opt('none','Off','No emails at all, not even invitations')+
     '</fieldset><p class="n-hint">Meeting invitations, agendas and reminders always come right away unless email is off.</p>'+
@@ -894,6 +901,7 @@ async function nightClick(action,d,button){
   }
   if(action==='n-rsvp-cancel'){meeting.rsvpReason=false;rerenderMeeting();return true;}
   if(action==='n-going'){await eventsApi('going',{event:d.event,going:d.going==='true'});if(document.querySelector('.wall:not(.night-page)'))await wallReload();else await refresh();tell(d.going==='true'?'You’re going.':'Taken off the list.');return true;}
+  if(action==='n-checkin'){await groupApi('checkin',{in:d.in==='true'});if(document.querySelector('.wall:not(.night-page)'))await wallReload();else await refresh();tell(d.in==='true'?'You’re in today. See you in the studio.':'Checked out.');return true;}
   if(action==='n-mfilter'){memberFilter=d.role;directoryPage();document.querySelectorAll('[data-action=n-mfilter]').forEach(b=>b.classList.toggle('on',b.dataset.role===memberFilter));return true;}
   return false;
 }

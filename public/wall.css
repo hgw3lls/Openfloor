@@ -393,3 +393,6 @@ body .night-page .n-search input,.night-page form input:not([type=radio]):not([t
 .night-page .n-pform select{border-color:var(--ink)!important;color:var(--ink)!important;background:var(--paper-2)!important}
 .n-pform input{text-transform:none!important;font:600 16px Geist,system-ui!important}
 .n-tags{display:flex;flex-direction:column;align-items:flex-end;gap:4px;text-align:right}
+.n-intoday{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--rule-strong)}
+.n-intoday a{display:flex;flex-direction:column;gap:4px;text-decoration:none;min-width:0;font:600 14px Geist,system-ui}
+.n-intoday a span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
