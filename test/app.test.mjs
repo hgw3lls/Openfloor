@@ -290,8 +290,12 @@ test('rate limits on sign-in requests', async () => {
 test('old organizer links keep working for their own meeting', async () => {
   const w = await world();
   const M = await newMeeting(w);
+  // Force a secret ending in "0": the case where a careless "wrong secret" would equal the real one.
+  await w.pg.query("UPDATE meetings SET secret=left(secret, length(secret) - 1) || '0' WHERE id=$1", [M.meeting]);
   const {secret} = (await w.pg.query('SELECT secret FROM meetings WHERE id=$1', [M.meeting])).rows[0];
-  assert.equal((await w.guest.call('notes', {notes: 'x'}, {...M, secret: secret.slice(0, -1) + '0'})).status, 403);
+  const wrong = secret.slice(0, -1) + (secret.endsWith('0') ? '1' : '0');
+  assert.notEqual(wrong, secret);
+  assert.equal((await w.guest.call('notes', {notes: 'x'}, {...M, secret: wrong})).status, 403);
   assert.equal((await w.guest.call('notes', {notes: 'x'}, {...M, secret})).status, 200);
 });
 
