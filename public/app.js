@@ -765,17 +765,21 @@ async function signDigits(value){
 
 /* Posts (screen 10) and a post (screen 11) */
 let composer=false;
+let postFilter='', postTags=['General','Studio','Kit','Shows','Swap'];
+const plusBtn=p=>can('posts')?'<button type="button" class="n-plus'+(p.myPlus?' on':'')+'" data-action="n-plus" data-post="'+p.id+'" data-plus="'+!p.myPlus+'" aria-pressed="'+!!p.myPlus+'" aria-label="+1 this post">+1 · '+(p.plus||0)+'</button>':'<span class="n-plus off">+1 · '+(p.plus||0)+'</span>';
 function postCard(p,i){
   const tone=p.pinned?'lime':'paper';
-  return '<a class="n-postcard '+tone+(i%2?' tilt':'')+'" href="#post/'+p.id+'"><span class="tape"></span><span class="n-by">'+avatar(p.author,p.pinned?1:i,'small')+'<span><b>'+esc(p.author)+'</b><small>'+esc(ago(p.created))+'</small></span>'+(p.pinned||p.hidden?'<span class="n-tag">'+(p.pinned?'Pinned':'')+(p.pinned&&p.hidden?' · ':'')+(p.hidden?'Hidden':'')+'</span>':'')+'</span>'+
-    '<span class="n-ptitle">'+esc(p.title)+'</span>'+(p.excerpt?'<span class="n-pbody">'+esc(p.excerpt.slice(0,160))+(p.excerpt.length>160?'…':'')+'</span>':'')+
-    '<span class="n-pfoot"><span>'+(p.replies?p.replies+(p.replies===1?' reply':' replies'):'No replies yet')+' →</span></span></a>';
+  const tag=[p.pinned?'Pinned':'',p.tag&&p.tag!=='General'?p.tag:'',p.hidden?'Hidden':''].filter(Boolean).join(' · ');
+  return '<div class="n-postcard '+tone+(i%2?' tilt':'')+'"><span class="tape"></span><a class="n-pcard" href="#post/'+p.id+'"><span class="n-by">'+avatar(p.author,p.pinned?1:i,'small')+'<span><b>'+esc(p.author)+'</b><small>'+esc(ago(p.created))+'</small></span>'+(tag?'<span class="n-tag">'+esc(tag)+'</span>':'')+'</span>'+
+    '<span class="n-ptitle">'+esc(p.title)+'</span>'+(p.excerpt?'<span class="n-pbody">'+esc(p.excerpt.slice(0,160))+(p.excerpt.length>160?'…':'')+'</span>':'')+'</a>'+
+    '<span class="n-pfoot">'+plusBtn(p)+'<a href="#post/'+p.id+'">'+(p.replies?p.replies+(p.replies===1?' reply':' replies'):'No replies yet')+' →</a></span></div>';
 }
 function boardPage(){
   nightPage(backRow(organizer()?'#me':'/','Wall',postList.length+' on the board')+
     '<div class="w-hero"><h1>Posts<br><em>&amp; notes</em></h1>'+(can('posts')?'<button type="button" class="n-pin" data-action="n-compose">+ Pin a post</button>':'')+'</div>'+
-    '<div class="n-posts">'+(postList.length?postList.map(postCard).join(''):'<p class="w-none">Nothing on the board yet.'+(can('posts')?' Pin the first post.':'')+'</p>')+'</div>'+
-    (composer?'<button type="button" class="w-scrim" data-action="n-compose-close" aria-label="Close"></button><form class="w-sheet n-composer" data-form="post" role="dialog" aria-modal="true" aria-label="Pin a post"><span class="tape"></span><span class="eyebrow">New post · everyone gets it by email</span><label><span class="sr">Headline</span><input name="title" required maxlength="140" placeholder="Headline" autocomplete="off"></label><label><span class="sr">Details</span><textarea name="body" maxlength="6000" rows="5" placeholder="Details (optional)"></textarea></label><div class="w-sfoot"><button type="button" data-action="n-compose-close">Close ✕</button><button class="w-opt on n-pinit" disabled>Pin it up</button></div></form>':''));
+    (()=>{const used=[...new Set(postList.map(p=>p.tag).filter(t=>t&&t!=='General'))];return used.length?'<div class="n-chips">'+['',...used].map(t=>'<button type="button" class="'+(postFilter===t?'on':'')+'" data-action="n-pfilter" data-tag="'+esc(t)+'">'+esc(t||'All')+'</button>').join('')+'</div>':'';})()+
+    '<div class="n-posts">'+(postList.filter(p=>!postFilter||p.tag===postFilter).length?postList.filter(p=>!postFilter||p.tag===postFilter).map(postCard).join(''):'<p class="w-none">Nothing on the board yet.'+(can('posts')?' Pin the first post.':'')+'</p>')+'</div>'+
+    (composer?'<button type="button" class="w-scrim" data-action="n-compose-close" aria-label="Close"></button><form class="w-sheet n-composer" data-form="post" role="dialog" aria-modal="true" aria-label="Pin a post"><span class="tape"></span><span class="eyebrow">New post · everyone gets it by email</span><label><span class="sr">Headline</span><input name="title" required maxlength="140" placeholder="Headline" autocomplete="off"></label><label><span class="sr">Details</span><textarea name="body" maxlength="6000" rows="5" placeholder="Details (optional)"></textarea></label><fieldset class="n-tagpick"><legend class="sr">Tag</legend>'+postTags.map((t,i)=>'<label><input type="radio" name="tag" value="'+t+'"'+(i===0?' checked':'')+'><span>'+t+'</span></label>').join('')+'</fieldset><div class="w-sfoot"><button type="button" data-action="n-compose-close">Close ✕</button><button class="w-opt on n-pinit" disabled>Pin it up</button></div></form>':''));
   if(composer)document.querySelector('.n-composer input')?.focus();
 }
 function replyList(list){
@@ -787,9 +791,9 @@ function replyBox(kind,target){
 }
 function postPage(){
   const p=post;
-  nightPage(backRow('#board','Posts',p.pinned?'Pinned':'')+
+  nightPage(backRow('#board','Posts',[p.pinned?'Pinned':'',p.tag&&p.tag!=='General'?p.tag:''].filter(Boolean).join(' · '))+
     '<div class="n-poster paper n-post"><span class="tape lime"></span><span class="n-by">'+avatar(p.author,1)+'<span><b>'+esc(p.author)+'</b><small>'+esc(ago(p.created))+(p.hidden?' · hidden':'')+'</small></span></span><span class="n-ptitle big">'+esc(p.title)+'</span>'+(p.body?'<span class="n-pbody">'+para(p.body)+'</span>':'')+
-    '<span class="n-pfoot"><span>'+p.comments.length+(p.comments.length===1?' reply':' replies')+'</span></span></div>'+
+    '<span class="n-pfoot">'+plusBtn(p)+'<span>'+p.comments.length+(p.comments.length===1?' reply':' replies')+'</span></span></div>'+
     (shown('comments')?sectionHead('Replies')+'<div class="n-replies">'+(p.comments.length?replyList(p.comments):'<p class="w-none">No replies yet.</p>')+'</div>'+replyBox('post',p.id):'')+
     ((organizer()||p.mine)?'<div class="n-danger">'+(organizer()?'<button type="button" data-action="pin-post" data-pinned="'+!p.pinned+'">'+(p.pinned?'Unpin':'Pin to top')+'</button><button type="button" data-action="hide-post" data-hidden="'+!p.hidden+'">'+(p.hidden?'Show':'Hide')+'</button>':'')+'<button type="button" data-action="delete-post">Delete post</button></div>':''));
 }
@@ -902,6 +906,8 @@ async function nightClick(action,d,button){
   if(action==='n-rsvp-cancel'){meeting.rsvpReason=false;rerenderMeeting();return true;}
   if(action==='n-going'){await eventsApi('going',{event:d.event,going:d.going==='true'});if(document.querySelector('.wall:not(.night-page)'))await wallReload();else await refresh();tell(d.going==='true'?'You’re going.':'Taken off the list.');return true;}
   if(action==='n-checkin'){await groupApi('checkin',{in:d.in==='true'});if(document.querySelector('.wall:not(.night-page)'))await wallReload();else await refresh();tell(d.in==='true'?'You’re in today. See you in the studio.':'Checked out.');return true;}
+  if(action==='n-plus'){await postsApi('plus',{post:d.post,plus:d.plus==='true'});await refresh();return true;}
+  if(action==='n-pfilter'){postFilter=d.tag;boardPage();return true;}
   if(action==='n-mfilter'){memberFilter=d.role;directoryPage();document.querySelectorAll('[data-action=n-mfilter]').forEach(b=>b.classList.toggle('on',b.dataset.role===memberFilter));return true;}
   return false;
 }
