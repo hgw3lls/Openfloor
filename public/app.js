@@ -9,6 +9,7 @@ else if(parts[0]==='event'&&isId(parts[1])){route.page='event';route.id=parts[1]
 else if(parts[0]==='post'&&isId(parts[1])){route.page='post';route.id=parts[1];}
 else if(parts[0]==='call'&&isId(parts[1])){route.page='call';route.id=parts[1];}
 else if(parts[0]==='proposal'&&isId(parts[1])){route.page='proposal';route.id=parts[1];}
+else if(parts[0]==='group'&&isId(parts[1])){route.page='group';route.id=parts[1];}
 else if(['organize','members','decisions','events','me','calls','meetings','board','settings','group'].includes(parts[0]))route.page=parts[0];
 
 const categories=['Discussion','Decision','Update'];
@@ -178,7 +179,7 @@ function members(){
   const row=m=>'<li><span><strong>'+esc(m.name||m.email)+'</strong> <span class="muted">'+(m.name?esc(m.email)+' · ':'')+(m.role==='organizer'?(m.status==='invited'?'Invited as organizer, hasn’t joined yet':'Organizer'):label[m.status]||m.status)+(m.emails==='none'?' · emails off':'')+'</span></span><span class="actions">'+
     (m.status==='requested'?'<button type="button" class="small" data-action="approve" data-member="'+m.id+'">Approve</button><button type="button" class="alt small" data-action="decline" data-member="'+m.id+'">Decline</button>':
      (m.status==='active'?'<button type="button" class="alt small" data-action="role" data-member="'+m.id+'" data-role="'+(m.role==='organizer'?'member':'organizer')+'">'+(m.role==='organizer'?'Make member':'Make organizer')+'</button>':'')+
-     (m.status==='active'?'<button type="button" class="alt small" data-action="member-title" data-member="'+m.id+'" data-title="'+esc(m.title||'')+'">'+(m.title?'Role: '+esc(m.title):'Set role')+'</button>':'')+
+     (m.status==='active'?'<a class="button alt small" href="#group/'+m.id+'">'+(m.title?'Role: '+esc(m.title):'Set role')+'</a>':'')+
      (m.id!==group.me.id?'<button type="button" class="alt small" data-action="remove-member" data-member="'+m.id+'" data-name="'+esc(m.name||m.email)+'">Remove</button>':''))+'</span></li>';
   root.innerHTML=hero('Members',list.filter(m=>m.status==='active').length+' active members','','<p><a href="/">← Organizer panel</a></p>')+
     (requests.length?'<section class="panel admin"><h2>Waiting for approval</h2><ul class="subs">'+requests.map(row).join('')+'</ul></section>':'')+
@@ -522,6 +523,7 @@ async function wallSubmit(kind,fields){
   if(kind==='w-reason'){if(await wallAnswer(wallDeck[wallAt],'no',fields.reason))await wallNext();return true;}
   if(kind==='n-propose'){const r=await proposalsApi('create',fields);proposing=false;location.hash='proposal/'+r.id;return true;}
   if(kind==='n-proposal-update'){await proposalsApi('update',{...fields,proposal:route.id});await refresh();tell('Saved.');return true;}
+  if(kind==='n-role'){const t=(fields.custom||'').trim()||fields.pick||'';await groupApi('title',{member:roleSheet.member,title:t});roleSheet=null;directory=(await groupApi('',undefined,{view:'directory'})).directory;document.querySelector('#n-dir')?.remove();directoryPage();tell(t?'Role saved: '+t+'.':'Role cleared.');return true;}
   if(kind==='n-signin'){await groupApi('signin',{email:fields.email});signAddr=fields.email.trim();signStep='code';signCode='';welcome();tell('If that address is on the member list, a code is on its way.');return true;}
   if(kind==='n-rsvp-no'){await api('rsvp',{status:'no',reason:fields.reason},meeting.id);meeting.rsvpReason=false;await reloadMeeting();tell('Saved: Can’t make it.');return true;}
   if(kind==='w-sheet-reason'){await api('rsvp',{status:'no',reason:fields.reason},wallSheet.meeting);wallReason=false;await wallReload();tell('Saved: Can’t make it.');return true;}
@@ -696,18 +698,29 @@ function callPage(){
 }
 
 /* Members directory and You */
-let directory=[], memberFilter='', memberQuery='';
+let directory=[], memberFilter='', memberQuery='', roleSheet=null;
+const presetRoles=['Committee','Chair','Treasurer','Secretary','Studio manager','Technician'];
+function roleSheetHtml(){
+  if(!roleSheet)return '';
+  const used=[...new Set([...presetRoles,...(directory||[]).map(m=>m.title).filter(Boolean)])];
+  return '<button type="button" class="w-scrim" data-action="n-role-close" aria-label="Close"></button><form class="w-sheet n-composer n-pform" data-form="n-role" role="dialog" aria-modal="true" aria-label="Role for '+esc(roleSheet.name)+'"><span class="tape"></span><span class="eyebrow">Role · shown in the directory</span><span class="w-stitle">'+esc(roleSheet.name)+'</span>'+
+    '<fieldset class="n-tagpick"><legend class="sr">Choose a role</legend>'+used.map(r=>'<label><input type="radio" name="pick" value="'+esc(r)+'"'+(roleSheet.title===r?' checked':'')+'><span>'+esc(r)+'</span></label>').join('')+'</fieldset>'+
+    '<label>Or type another<input name="custom" maxlength="40" placeholder="e.g. Archivist" value="'+esc(used.includes(roleSheet.title)?'':roleSheet.title)+'"></label>'+
+    '<p class="n-hint flush">A role is a label only. It doesn’t make someone an organizer.</p>'+
+    '<div class="w-sfoot"><button type="button" data-action="n-role-clear">Clear role</button><button class="w-opt on">Save</button></div></form>';
+}
 function directoryPage(){
   const q=memberQuery.trim().toLowerCase();
   const list=directory.filter(m=>(!memberFilter||(memberFilter==='organizer'?m.role==='organizer':memberFilter==='in'?m.inToday:m.title===memberFilter))&&(!q||(m.name+' '+m.medium+' '+m.title).toLowerCase().includes(q)));
   const since=directory.reduce((y,m)=>Math.min(y,new Date(m.since).getFullYear()),new Date().getFullYear());
-  const rows=list.map((m,i)=>'<div class="n-person big">'+avatar(m.name,i)+'<span><strong>'+esc(m.name)+(m.me?' (you)':'')+'</strong><small>'+esc(m.medium||'Member since '+new Date(m.since).getFullYear())+'</small></span><span class="n-tags">'+(m.title?'<span class="eyebrow lime">'+esc(m.title)+'</span>':'')+(m.role==='organizer'?'<span class="eyebrow">Organizer</span>':'')+(m.inToday?'<span class="eyebrow">In today</span>':'')+'</span></div>').join('');
+  const rows=list.map((m,i)=>'<div class="n-person big">'+avatar(m.name,i)+'<span><strong>'+esc(m.name)+(m.me?' (you)':'')+'</strong><small>'+esc(m.medium||'Member since '+new Date(m.since).getFullYear())+'</small></span><span class="n-tags">'+(m.title?'<span class="eyebrow lime">'+esc(m.title)+'</span>':'')+(m.role==='organizer'?'<span class="eyebrow">Organizer</span>':'')+(m.inToday?'<span class="eyebrow">In today</span>':'')+(organizer()?'<button type="button" class="n-btn small" data-action="n-role" data-member="'+m.id+'" data-name="'+esc(m.name)+'" data-title="'+esc(m.title||'')+'">'+(m.title?'Change role':'Set role')+'</button>':'')+'</span></div>').join('');
   const box=document.querySelector('#n-dir');
   if(box){box.innerHTML=rows||'<p class="w-none">Nobody matches.</p>';return;}
   nightPage(backRow('#settings','You',directory.length+' members')+titleBlock('The','group',['SINCE',String(since),'EST.'])+
     '<div class="n-search"><label><span class="sr">Find someone</span><input id="n-q" type="search" placeholder="Find someone or a technique" value="'+esc(memberQuery)+'"></label></div>'+
     '<div class="n-chips">'+[['','All'],...[...new Set(directory.map(m=>m.title).filter(Boolean))].map(t=>[t,t]),['organizer','Organizers'],['in','In today']].map(([k,l])=>'<button type="button" class="'+(memberFilter===k?'on':'')+'" data-action="n-mfilter" data-role="'+k+'">'+l+'</button>').join('')+'</div>'+
-    '<div id="n-dir" class="n-rule">'+(rows||'<p class="w-none">Nobody matches.</p>')+'</div>');
+    '<div id="n-dir" class="n-rule">'+(rows||'<p class="w-none">Nobody matches.</p>')+'</div>'+roleSheetHtml());
+  if(roleSheet)document.querySelector('.n-pform input[name=custom]')?.focus();
 }
 function settingsPage(){
   const me=group.me, mineMeet=group.meetings.upcoming.filter(m=>m.mine==='yes'||m.mine==='maybe');
@@ -919,6 +932,9 @@ async function nightClick(action,d,button){
   if(action==='n-plus'){await postsApi('plus',{post:d.post,plus:d.plus==='true'});await refresh();return true;}
   if(action==='n-pfilter'){postFilter=d.tag;boardPage();return true;}
   if(action==='n-ccheck'){await callsApi('check',{call:route.id,item:Number(d.item),done:d.done==='true'});await refresh();return true;}
+  if(action==='n-role'){roleSheet={member:d.member,name:d.name,title:d.title};document.querySelector('#n-dir')?.remove();directoryPage();return true;}
+  if(action==='n-role-close'){roleSheet=null;document.querySelector('#n-dir')?.remove();directoryPage();return true;}
+  if(action==='n-role-clear'){await groupApi('title',{member:roleSheet.member,title:''});roleSheet=null;directory=(await groupApi('',undefined,{view:'directory'})).directory;document.querySelector('#n-dir')?.remove();directoryPage();tell('Role cleared.');return true;}
   if(action==='n-mfilter'){memberFilter=d.role;directoryPage();document.querySelectorAll('[data-action=n-mfilter]').forEach(b=>b.classList.toggle('on',b.dataset.role===memberFilter));return true;}
   return false;
 }
@@ -958,7 +974,7 @@ async function show(){
     case 'meetings': meetingsPage(); return;
     case 'board': postList=shown('posts')?(await postsApi()).posts:[]; boardPage(); return;
     case 'settings': settingsPage(); return;
-    case 'group': directory=(await groupApi('',undefined,{view:'directory'})).directory; directoryPage(); return;
+    case 'group': {directory=(await groupApi('',undefined,{view:'directory'})).directory;const who=route.id&&organizer()&&directory.find(m=>m.id===route.id);if(who&&!roleSheet)roleSheet={member:who.id,name:who.name,title:who.title||''};document.querySelector('#n-dir')?.remove();directoryPage();return;}
     default:
       if(organizer()){route.page='organize';group=await groupApi('',undefined,{view:'organize'});header();organize();return;}
       postList=shown('posts')?(await postsApi()).posts:[]; wallStart();
@@ -1066,7 +1082,6 @@ root.addEventListener('click',ev=>{
     if(action==='event-announce'||action==='event-help'){const r=await eventsApi(action==='event-announce'?'announce':'help',{event:route.id});await refresh();tell(r.notice);return;}
     if(action==='install'){if(installPrompt){installPrompt.prompt();installPrompt=null;}return;}
     if(action==='install-dismiss'){try{localStorage.setItem('tp-install','no');}catch{}button.closest('section')?.remove();return;}
-    if(action==='member-title'){const t=prompt('Role shown in the member directory (like Committee or Treasurer). Leave empty to clear.',d.title||'');if(t===null)return;await groupApi('title',{member:d.member,title:t});await refresh();tell(t.trim()?'Role saved.':'Role cleared.');return;}
     if(action==='call-filter'){callFilter=d.kind;callsPage();return;}
     if(action==='interest'){await callsApi('interest',{call:d.call||route.id,status:d.status});await refresh();tell(d.status==='none'?'Cleared.':'Saved: '+interestLabels[d.status]+'.');return;}
     if(action==='call-hide'){await callsApi('hide',{call:route.id,hidden:d.hidden==='true'});await refresh();tell('Saved.');return;}
