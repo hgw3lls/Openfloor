@@ -34,6 +34,9 @@ try{preview=localStorage.getItem('tp-preview')==='1';}catch{}
 const setPreview=on=>{try{on?localStorage.setItem('tp-preview','1'):localStorage.removeItem('tp-preview');}catch{}};
 const realOrganizer=()=>group?.me?.role==='organizer';
 const organizer=()=>realOrganizer()&&!preview;
+// What members can do with each feature: full, view or off. Organizers get everything (unless previewing).
+const lvl=key=>organizer()?'full':group?.features?.[key]||'full';
+const can=key=>lvl(key)==='full', shown=key=>lvl(key)!=='off';
 
 async function request(path,params,payload){
   const headers={};
@@ -58,7 +61,7 @@ function header(){
   if(!me){nav.innerHTML='<a href="/">Sign in</a>';banner.innerHTML='';return;}
   const link=(href,label,page)=>'<a href="'+href+'"'+(route.page===page?' class="on"':'')+'>'+label+'</a>';
   const home=organizer()?link('/','Organizer',route.page==='organize'?'organize':'home')+link('#me','Your page','me'):link('/','Meetings',route.page==='me'?'me':'home');
-  nav.innerHTML=home+link('#events','Events','events')+link('#calls','Calls','calls')+link('#decisions','Decisions','decisions')+
+  nav.innerHTML=home+(shown('events')?link('#events','Events','events'):'')+(shown('calls')?link('#calls','Calls','calls'):'')+link('#decisions','Decisions','decisions')+
     '<span class="who">'+esc(me.name||me.email)+'</span>'+
     (realOrganizer()?'<button type="button" class="alt" data-action="preview">'+(preview?'Exit preview':'Preview as member')+'</button>':'');
   banner.innerHTML=preview?'You’re previewing the site as a regular member. <button type="button" data-action="preview">Exit preview</button>':'';
@@ -67,6 +70,7 @@ function orgbar(label,href){
   return organizer()?'<div class="orgbar"><strong>Organizer</strong><a class="button" href="'+href+'">'+label+'</a><span class="muted">Members see this page without these controls.</span></div>':'';
 }
 function comments(list,{kind,target,form=true,small=false}={}){
+  form=form&&can('comments');
   return (list.length?'<ul class="comments'+(small?' small':'')+'">'+list.map(c=>'<li'+(c.hidden?' class="hidden-topic"':'')+'><div class="meta"><strong>'+esc(c.author)+'</strong> · '+ago(c.created)+(c.via==='email'?' · by email':'')+(c.hidden?' · hidden':'')+((c.mine||organizer())?' <button type="button" class="link" data-action="delete-comment" data-comment="'+c.id+'">Delete</button>':'')+'</div><div class="body">'+para(c.body)+'</div></li>').join('')+'</ul>':'')+
     (form?'<form class="reply" data-form="comment" data-kind="'+kind+'" data-target="'+target+'"><label><span class="sr">Your reply</span><textarea name="body" maxlength="3000" required placeholder="Write a reply…"></textarea></label><button>Reply</button></form>':'');
 }
@@ -108,11 +112,11 @@ function dashboard(){
     (group.myActions?.length?'<section class="panel"><h2>Your action items</h2><ul class="subs">'+group.myActions.map(a=>actionRow(a,{showMeeting:true,canDone:true})).join('')+'</ul></section>':'')+
     (group.mySlots?.length?'<section class="panel"><h2>Your sign-ups</h2><ul class="subs">'+group.mySlots.map(s=>'<li><span><strong>'+esc(s.label)+'</strong> <span class="muted">'+esc(s.when)+' · <a href="#event/'+s.event+(organizer()?'/view':'')+'">'+esc(s.eventTitle)+'</a></span></span></li>').join('')+'</ul></section>':'')+
     '<section class="panel"><h2>Upcoming meetings</h2>'+(group.meetings.upcoming.length?group.meetings.upcoming.map(meetingCard).join(''):'<p class="muted">No meetings scheduled yet.</p>')+'</section>'+
-    '<section class="panel"><h2>Coming up</h2>'+(group.comingUp?.length?group.comingUp.map(eventCard).join(''):'<p class="muted">No events yet.</p>')+'<p><a href="#events">All events, and add your own →</a></p></section>'+
-    '<section class="panel"><h2>Deadlines coming up</h2>'+(group.deadlines?.length?group.deadlines.map(callCard).join(''):'<p class="muted">No open calls yet.</p>')+'<p><a href="#calls">All open calls, and share one →</a></p></section>'+
-    '<section class="panel"><h2>Posts</h2><p class="muted">Announcements, questions and news for the group. Everyone gets them by email and can reply from their inbox.</p>'+
+    (shown('events')?'<section class="panel"><h2>Coming up</h2>'+(group.comingUp?.length?group.comingUp.map(eventCard).join(''):'<p class="muted">No events yet.</p>')+'<p><a href="#events">'+(can('events')?'All events, and add your own →':'All events →')+'</a></p></section>':'')+
+    (shown('calls')?'<section class="panel"><h2>Deadlines coming up</h2>'+(group.deadlines?.length?group.deadlines.map(callCard).join(''):'<p class="muted">No open calls yet.</p>')+'<p><a href="#calls">'+(can('calls')?'All open calls, and share one →':'All open calls →')+'</a></p></section>':'')+
+    (shown('posts')?'<section class="panel"><h2>Posts</h2><p class="muted">Announcements, questions and news for the group. Everyone gets them by email and can reply from their inbox.</p>'+
       (postList.length?postList.map(p=>'<a class="card" href="#post/'+p.id+'"><strong>'+(p.pinned?'📌 ':'')+esc(p.title)+'</strong><span class="muted">'+esc(p.author)+' · '+ago(p.created)+(p.replies?' · '+p.replies+(p.replies===1?' reply':' replies'):'')+(p.hidden?' · hidden':'')+'</span>'+(p.excerpt?'<span>'+esc(p.excerpt)+(p.excerpt.length>=240?'…':'')+'</span>':'')+'</a>').join(''):'<p class="muted">No posts yet.</p>')+
-      '<details class="draft"><summary>Write a post</summary><form data-form="post"><label>Title<input name="title" required maxlength="140"></label><label>Message<textarea name="body" maxlength="6000" rows="6"></textarea></label><button>Post to the group</button></form></details></section>'+
+      (can('posts')?'<details class="draft"><summary>Write a post</summary><form data-form="post"><label>Title<input name="title" required maxlength="140"></label><label>Message<textarea name="body" maxlength="6000" rows="6"></textarea></label><button>Post to the group</button></form></details>':'')+'</section>':'')+
     (group.meetings.past.length?'<section class="panel"><h2>Past meetings</h2>'+group.meetings.past.map(meetingCard).join('')+'</section>':'')+
     calendarPanel()+settingsForm(me);
 }
@@ -147,11 +151,17 @@ function organize(){
     '<section class="panel admin"><h2>Needs attention</h2>'+(attention.length?'<ul class="attention">'+attention.join('')+'</ul>':'<p class="muted">Nothing right now.</p>')+'</section>'+
     '<section class="panel"><h2>Meetings</h2>'+(o.meetings.length?'<ul class="subs">'+o.meetings.map(x=>'<li><span><strong>'+esc(x.title)+'</strong> <span class="muted">'+esc(x.when)+' · '+x.going+' going · '+x.maybe+' maybe · '+x.declined+' can’t · '+x.noAnswer+' no answer · '+x.topics+(x.topics===1?' topic':' topics')+'</span></span><span class="actions"><a class="button alt small" href="#'+x.id+'/view">Member page</a><a class="button small" href="#'+x.id+'">Manage</a></span></li>').join('')+'</ul>':'<p class="muted">No upcoming meetings.</p>')+
       '<details class="draft"><summary>New meeting</summary><form data-form="new-meeting"><p class="muted">Everyone on the member list gets an email with RSVP buttons.</p><label>Name<input name="title" required maxlength="100" placeholder="Monthly members meeting"></label>'+timeFields({timezone:zone(),duration:90})+'<button>Create and invite members</button></form></details></section>'+
-    organizersPanel()+
+    organizersPanel()+featuresPanel()+
     '<section class="panel"><h2>Quick links</h2><div class="actions"><a class="button alt" href="#members">Members and invitations</a><a class="button alt" href="#events">Events and sign-ups</a><a class="button alt" href="#decisions">Decisions</a></div>'+
       '<h3>Download</h3><div class="actions"><a class="button alt" href="/api/export?what=members">Members</a><a class="button alt" href="/api/export?what=meetings">Meetings and outcomes</a><a class="button alt" href="/api/export?what=attendance">Attendance</a></div></section>'+
     '<section class="panel"><h2>Email</h2><p>'+e.sent_today+' sent in the last 24 hours (limit '+e.limit+') · '+e.waiting+' waiting · '+e.retrying+' being retried · '+e.failed+' failed</p><p class="muted">Email replies last checked '+esc(checked)+'. '+m.no_email+(m.no_email===1?' member has':' members have')+' email turned off.</p></section>'+
     '<section class="panel"><h2>See it as a member</h2><p class="muted">Preview shows every page exactly as a regular member sees it: no vote counts before the agenda, no hidden topics, no organizer tools.</p><button type="button" data-action="preview">Preview as member</button></section>';
+}
+function featuresPanel(){
+  const list=group.featureList||[], now=group.features||{};
+  const pick=(f,v,label)=>'<label class="pick"><input type="radio" name="'+f.key+'" value="'+v+'"'+((now[f.key]||'full')===v?' checked':'')+'> <span><strong>'+label+'</strong><br><span class="muted">'+esc(f[v])+'</span></span></label>';
+  return '<section class="panel"><h2>What members can use</h2><p class="muted">Turn features off, or make them view-only, for everyone who isn’t an organizer. Organizers always have everything. RSVPs and action items are always on. Use <strong>Preview as member</strong> to check the result.</p>'+
+    '<form data-form="features">'+list.map(f=>'<fieldset class="stack"><legend>'+esc(f.label)+'</legend><div class="levels">'+pick(f,'full','On')+pick(f,'view','View only')+pick(f,'off','Off')+'</div></fieldset>').join('')+'<button>Save</button></form></section>';
 }
 function organizersPanel(){
   const list=group.members||[], orgs=list.filter(m=>m.role==='organizer'&&m.status==='active'), pending=list.filter(m=>m.role==='organizer'&&m.status==='invited');
@@ -183,7 +193,7 @@ function topicItem(item,{manage=false}={}){
   const open=meeting.phase!=='agenda';
   const counts=item.up!==null&&item.up!==undefined?'<span>👍 '+item.up+' · 👎 '+item.down+'</span>':'';
   const tags=(item.own?'<span class="tag">Your topic</span>':'')+(item.carried?'<span class="tag">Carried over</span>':'')+(item.hidden?'<span class="tag">Hidden from members</span>':'');
-  const votes=!manage&&open&&meeting.me&&!item.own&&!item.hidden?'<div class="votes"><button type="button" data-action="cast" data-topic="'+item.id+'" data-value="1" aria-pressed="'+(item.mine>0)+'" aria-label="Vote up: '+esc(item.label)+'">👍 Up</button><button type="button" data-action="cast" data-topic="'+item.id+'" data-value="-1" aria-pressed="'+(item.mine<0)+'" aria-label="Vote down: '+esc(item.label)+'">👎 Down</button></div>':'';
+  const votes=!manage&&open&&meeting.me&&can('topics')&&!item.own&&!item.hidden?'<div class="votes"><button type="button" data-action="cast" data-topic="'+item.id+'" data-value="1" aria-pressed="'+(item.mine>0)+'" aria-label="Vote up: '+esc(item.label)+'">👍 Up</button><button type="button" data-action="cast" data-topic="'+item.id+'" data-value="-1" aria-pressed="'+(item.mine<0)+'" aria-label="Vote down: '+esc(item.label)+'">👎 Down</button></div>':'';
   const talk=item.comments?.length?'<details class="talk"><summary>'+item.comments.length+(item.comments.length===1?' comment':' comments')+'</summary>'+comments(item.comments,{form:false,small:true})+'</details>':'';
   const tools=manage?'<div class="actions"><button type="button" class="alt small" data-action="edit-topic" data-topic="'+item.id+'">Edit</button><button type="button" class="alt small" data-action="hide-topic" data-topic="'+item.id+'" data-hidden="'+!item.hidden+'">'+(item.hidden?'Show':'Hide')+'</button><button type="button" class="alt small" data-action="delete-topic" data-topic="'+item.id+'">Delete</button></div>':'';
   return '<div class="topic'+(item.hidden?' hidden-topic':'')+'"><strong>'+esc(item.label)+'</strong><div class="mono"><span class="tag">'+esc(item.kind)+'</span>'+tags+counts+'</div>'+(item.detail?'<p>'+esc(item.detail)+'</p>':'')+votes+talk+tools+'</div>';
@@ -213,9 +223,9 @@ function meetingView(){
     (meeting.phase==='agenda'?'<section class="panel"><h2>Agenda</h2><p class="mono">'+meeting.agenda.reduce((total,item)=>total+item.minutes,0)+' minutes</p>'+meeting.agenda.map(item=>'<div class="topic"><div class="mono"><span class="tag">'+esc(item.kind)+'</span>'+item.minutes+' min</div><strong>'+esc(item.label)+'</strong>'+(item.detail?'<p>'+para(item.detail)+'</p>':'')+'</div>').join('')+'</section>':'')+
     (meeting.notes?'<section class="panel"><h2>Decisions and next steps</h2><div class="note">'+esc(meeting.notes)+'</div></section>':'')+
     (list.length?'<section class="panel"><h2>Action items</h2><ul class="subs">'+list.map(a=>actionRow(a,{canDone:a.mine})).join('')+'</ul></section>':'')+
-    (meeting.phase==='collect'&&meeting.me?'<form class="panel" data-form="topic"><h2>Suggest a topic</h2><p class="muted">What should we make time for? Members see your topic and vote on it; you can’t vote on your own.</p><label>Topic<input name="label" maxlength="120" required></label><label>What would you like to happen? <small>(optional)</small><textarea name="detail" maxlength="650"></textarea></label><label>Type<select name="kind">'+options('Discussion')+'</select></label>'+trap+'<button>Submit topic</button></form>':'')+
-    (open?'<section class="panel"><h2>Submitted topics</h2>'+(meeting.topics.length?(meeting.me?'<p class="muted">Vote 👍 or 👎 on any topic. Tap again to take your vote back.</p>':'')+meeting.topics.map(t=>topicItem(t)).join(''):'<p class="muted">No topics yet.</p>')+'</section>':'')+
-    (meeting.me?'<section class="panel"><h2>Discussion</h2><p class="muted">Questions and notes about this meeting. You can also reply to any meeting email.</p>'+comments(meeting.discussion||[],{kind:'meeting',target:meeting.id})+'</section>':joinPrompt());
+    (meeting.phase==='collect'&&meeting.me&&can('topics')?'<form class="panel" data-form="topic"><h2>Suggest a topic</h2><p class="muted">What should we make time for? Members see your topic and vote on it; you can’t vote on your own.</p><label>Topic<input name="label" maxlength="120" required></label><label>What would you like to happen? <small>(optional)</small><textarea name="detail" maxlength="650"></textarea></label><label>Type<select name="kind">'+options('Discussion')+'</select></label>'+trap+'<button>Submit topic</button></form>':'')+
+    (open&&shown('topics')?'<section class="panel"><h2>Submitted topics</h2>'+(meeting.topics.length?(meeting.me&&can('topics')?'<p class="muted">Vote 👍 or 👎 on any topic. Tap again to take your vote back.</p>':'')+meeting.topics.map(t=>topicItem(t)).join(''):'<p class="muted">No topics yet.</p>')+'</section>':'')+
+    (meeting.me&&!shown('comments')?'':meeting.me?'<section class="panel"><h2>Discussion</h2><p class="muted">Questions and notes about this meeting. You can also reply to any meeting email.</p>'+comments(meeting.discussion||[],{kind:'meeting',target:meeting.id})+'</section>':joinPrompt());
 }
 
 /* Meetings: organizer page */
@@ -266,22 +276,22 @@ function eventFields(e={}){
 function eventsPage(){
   root.innerHTML=hero('Events','Shows, openings, workshops and workdays. Add your own, and sign up to help.')+
     '<section class="panel"><h2>Coming up</h2>'+(eventList.upcoming.length?eventList.upcoming.map(eventCard).join(''):'<p class="muted">Nothing yet.</p>')+'</section>'+
-    '<details class="panel"><summary>Add an event</summary><form data-form="event-create">'+eventFields()+'<button>Add event</button><p class="muted">You can add sign-up slots, like gallery sitting or install crew, on the next page.</p></form></details>'+
+    (can('events')?'<details class="panel"><summary>Add an event</summary><form data-form="event-create">'+eventFields()+'<button>Add event</button><p class="muted">You can add sign-up slots, like gallery sitting or install crew, on the next page.</p></form></details>':'')+
     (eventList.past.length?'<section class="panel"><h2>Past</h2>'+eventList.past.map(eventCard).join('')+'</section>':'');
 }
 function slotRow(s,{manage=false}={}){
   const full=s.taken>=s.capacity, people=s.people.map(p=>p.name);
   return '<div class="slot"><span><strong>'+esc(s.label)+'</strong>'+(s.when?'<br><span class="who">'+esc(s.when)+'</span>':'')+'<br><span class="who">'+s.taken+' of '+s.capacity+(people.length?': '+esc(people.join(', ')):'')+'</span></span><span class="actions">'+
     (manage?s.people.map(p=>'<button type="button" class="alt small" data-action="remove-claim" data-slot="'+s.id+'" data-member="'+p.id+'">Remove '+esc(p.name)+'</button>').join('')+'<button type="button" class="alt small" data-action="slot-delete" data-slot="'+s.id+'">Delete slot</button>':
-      event.past?'':s.mine?'<button type="button" class="alt small" data-action="unclaim" data-slot="'+s.id+'">Drop out</button>':full?'<span class="full">Full</span>':'<button type="button" class="small" data-action="claim" data-slot="'+s.id+'">Sign me up</button>')+'</span></div>';
+      event.past||!can('signups')?'':s.mine?'<button type="button" class="alt small" data-action="unclaim" data-slot="'+s.id+'">Drop out</button>':full?'<span class="full">Full</span>':'<button type="button" class="small" data-action="claim" data-slot="'+s.id+'">Sign me up</button>')+'</span></div>';
 }
 function eventView(){
   const e=event;
   root.innerHTML=hero(e.title,e.when+(e.location?' · '+e.location:''),e.kind,e.link?'<p class="when"><a href="'+esc(e.link)+'" target="_blank" rel="noopener">'+esc(e.link)+'</a></p>':'')+
     (e.canEdit&&!preview?'<div class="orgbar"><strong>'+(organizer()?'Organizer':'Your event')+'</strong><a class="button" href="#event/'+e.id+(organizer()?'':'/manage')+'">Manage this event</a></div>':'')+
     (e.description?'<section class="panel"><div class="note">'+para(e.description)+'</div><p class="muted">Added by '+esc(e.author||'a member')+'</p></section>':'')+
-    (e.slots.length?'<section class="panel"><h2>Help needed</h2><p class="muted">Sign up for a slot. You’ll get a reminder the day before.</p>'+e.slots.map(s=>slotRow(s)).join('')+'</section>':'')+
-    '<section class="panel"><h2>Discussion</h2>'+comments(e.comments,{kind:'event',target:e.id})+'</section>';
+    (e.slots.length&&shown('signups')?'<section class="panel"><h2>Help needed</h2><p class="muted">'+(can('signups')?'Sign up for a slot. You’ll get a reminder the day before.':'Who’s helping.')+'</p>'+e.slots.map(s=>slotRow(s)).join('')+'</section>':'')+
+    (shown('comments')?'<section class="panel"><h2>Discussion</h2>'+comments(e.comments,{kind:'event',target:e.id})+'</section>':'');
 }
 function eventManage(){
   const e=event;
@@ -316,7 +326,7 @@ function callsPage(){
   root.innerHTML=hero('Open calls','Grants, residencies, exhibitions and competitions. Share what you find, and see who else is applying.')+
     (kinds.length>1?'<div class="actions">'+['',...kinds].map(k=>'<button type="button" class="'+(callFilter===k?'':'alt ')+'small" data-action="call-filter" data-kind="'+esc(k)+'">'+(k||'All')+'</button>').join('')+'</div>':'')+
     '<section class="panel"><h2>Open</h2>'+(shown.length?shown.map(callCard).join(''):'<p class="muted">No open calls yet.</p>')+'</section>'+
-    '<details class="panel"><summary>Share an open call</summary><form data-form="call-create">'+callFields()+'<button>Share with the group</button></form></details>'+
+    (can('calls')?'<details class="panel"><summary>Share an open call</summary><form data-form="call-create">'+callFields()+'<button>Share with the group</button></form></details>':'')+
     (callList.closed.length?'<details class="panel"><summary>Closed ('+callList.closed.length+')</summary>'+callList.closed.map(callCard).join('')+'</details>':'');
 }
 function callPage(){
@@ -326,8 +336,8 @@ function callPage(){
   root.innerHTML=hero(c.title,[c.organization,'Deadline '+dueText(c.deadline)+(c.closed?' (closed)':left===0?' (today)':' ('+left+(left===1?' day':' days')+' left)'),c.award].filter(Boolean).join(' · '),c.kind,
       (c.link?'<p class="when"><a href="'+esc(c.link)+'" target="_blank" rel="noopener">'+esc(c.link)+'</a></p>':'')+'<p><a href="#calls">← All open calls</a></p>')+
     (c.details?'<section class="panel"><div class="note">'+para(c.details)+'</div><p class="muted">Shared by '+esc(c.author||'a member')+'</p></section>':'')+
-    '<section class="panel"><h2>Are you applying?</h2>'+(c.closed?'<p class="muted">This call has closed.</p>':'<div class="actions">'+choose('interested')+choose('applying')+choose('applied')+(c.myStatus?'<button type="button" class="alt small" data-action="interest" data-status="none">Clear</button>':'')+'</div><p class="muted">Interested or applying gets you reminders a week and a day before the deadline.</p>')+(people||'<p class="muted">Nobody yet.</p>')+'</section>'+
-    '<section class="panel"><h2>Discussion</h2><p class="muted">Questions, tips, or finding people to apply with.</p>'+comments(c.comments,{kind:'call',target:c.id})+'</section>'+
+    '<section class="panel"><h2>'+(can('calls')?'Are you applying?':'Who’s applying')+'</h2>'+(!can('calls')?'':c.closed?'<p class="muted">This call has closed.</p>':'<div class="actions">'+choose('interested')+choose('applying')+choose('applied')+(c.myStatus?'<button type="button" class="alt small" data-action="interest" data-status="none">Clear</button>':'')+'</div><p class="muted">Interested or applying gets you reminders a week and a day before the deadline.</p>')+(people||'<p class="muted">Nobody yet.</p>')+'</section>'+
+    (shown('comments')?'<section class="panel"><h2>Discussion</h2><p class="muted">Questions, tips, or finding people to apply with.</p>'+comments(c.comments,{kind:'call',target:c.id})+'</section>':'')+
     (c.canEdit&&!preview?'<details class="panel admin"><summary>Edit this call</summary><form data-form="call-update">'+callFields(c)+'<button>Save</button></form></details>'+
       '<section class="panel admin"><h2>Remove</h2><div class="actions">'+(organizer()?'<button type="button" class="alt" data-action="call-hide" data-hidden="'+!c.hidden+'">'+(c.hidden?'Show call':'Hide call')+'</button>':'')+'<button type="button" class="alt" data-action="call-delete">Delete this call</button></div></section>':'');
 }
@@ -337,7 +347,7 @@ function postPage(){
   const p=post;
   root.innerHTML=hero(p.title,p.author+' · '+ago(p.created)+(p.hidden?' · hidden':''),p.pinned?'Pinned':'','<p><a href="/">← Back</a></p>')+
     (p.body?'<section class="panel"><div class="note">'+para(p.body)+'</div></section>':'')+
-    '<section class="panel"><h2>Replies</h2>'+comments(p.comments,{kind:'post',target:p.id})+'</section>'+
+    (shown('comments')?'<section class="panel"><h2>Replies</h2>'+comments(p.comments,{kind:'post',target:p.id})+'</section>':'')+
     ((organizer()||p.mine)?'<section class="panel admin"><div class="actions">'+(organizer()?'<button type="button" class="alt" data-action="pin-post" data-pinned="'+!p.pinned+'">'+(p.pinned?'Unpin':'Pin to top')+'</button><button type="button" class="alt" data-action="hide-post" data-hidden="'+!p.hidden+'">'+(p.hidden?'Show':'Hide')+'</button>':'')+'<button type="button" class="alt" data-action="delete-post">Delete post</button></div></section>':'');
 }
 function decisionsPage(){
@@ -388,10 +398,10 @@ async function show(){
       else meetingView();
       return;
     }
-    case 'me': postList=(await postsApi()).posts; dashboard(); return;
+    case 'me': postList=shown('posts')?(await postsApi()).posts:[]; dashboard(); return;
     default:
       if(organizer()){route.page='organize';group=await groupApi('',undefined,{view:'organize'});header();organize();return;}
-      postList=(await postsApi()).posts; dashboard();
+      postList=shown('posts')?(await postsApi()).posts:[]; dashboard();
   }
 }
 async function load(){
@@ -439,6 +449,7 @@ root.addEventListener('submit',ev=>{
       case 'profile': await groupApi('profile',{name:fields.name,emails:fields.email==='none'?'none':'all',digest:fields.email==='none'?undefined:fields.email}); await refresh(); tell('Settings saved.'); return;
       case 'add-members': result=await groupApi('add',{people:fields.people,role:data.has('organizer')?'organizer':'member'}); await refresh(); tell(result.notice); return;
       case 'promote': result=await groupApi('role',{member:fields.member,role:'organizer'}); await refresh(); tell(result.notice); return;
+      case 'features': await groupApi('features',fields); await refresh(); tell('Saved. Members see the change right away.'); return;
       case 'post': {const created=await postsApi('create',fields); location.hash='post/'+created.id; return;}
       case 'comment': await postsApi('comment',{kind:form.dataset.kind,target:form.dataset.target,body:fields.body}); await refresh(); tell('Reply posted.'); return;
       case 'new-meeting': {const created=await api('',fields,''); location.hash=created.id+'/manage'; return;}
