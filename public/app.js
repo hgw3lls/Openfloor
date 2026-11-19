@@ -287,7 +287,10 @@ function eventManage(){
       '<form data-form="slot-add" class="draft"><h3>Add a slot</h3><label>What<input name="label" required maxlength="140" placeholder="Gallery sitting, Saturday 12–3"></label><div class="row"><label>When <small>(optional)</small><input type="datetime-local" name="local"></label><label>People needed<input type="number" name="capacity" min="1" max="100" value="1"></label></div><label>Length (minutes) <small>(optional)</small><input type="number" name="duration" min="0" max="1440" value="180"></label><button>Add slot</button></form></section>'+
     (organizer()?'<section class="panel admin"><h2>Email</h2><div class="actions"><button type="button" data-action="event-announce">'+(e.announced?'Email everyone again':'Email everyone about this event')+'</button><button type="button" class="alt" data-action="event-help">Ask for help (people not signed up yet)</button></div><p class="muted">Events also appear in members’ daily or weekly summaries.</p></section>':'')+
     '<form data-form="event-update" class="panel admin"><h2>Details</h2>'+eventFields(e)+'<button>Save</button></form>'+
-    '<section class="panel admin"><div class="actions">'+(organizer()?'<button type="button" class="alt" data-action="event-hide" data-hidden="'+!e.hidden+'">'+(e.hidden?'Show event':'Hide event')+'</button>':'')+'<button type="button" class="alt" data-action="event-delete">Delete event</button></div></section>';
+    (organizer()?'<section class="panel admin"><h2>Hide</h2><p class="muted">Hidden events disappear for members but keep their sign-ups and discussion.</p><button type="button" class="alt" data-action="event-hide" data-hidden="'+!e.hidden+'">'+(e.hidden?'Show event':'Hide event')+'</button></section>':'')+
+    '<section class="panel admin"><h2>Delete event</h2><p class="muted">Removes the event with its sign-up slots and discussion. This can’t be undone.</p>'+
+      (!e.past&&(e.announced||e.slots.reduce((n,x)=>n+x.taken,0))?'<label class="check"><input type="checkbox" id="notify-cancel" checked> '+(e.announced?'Email everyone that it’s cancelled':'Email the people who signed up that it’s cancelled')+'</label>':'')+
+      '<button type="button" class="alt" data-action="event-delete">Delete this event</button></section>';
 }
 
 /* Posts and decisions */
@@ -443,7 +446,10 @@ root.addEventListener('click',ev=>{
     if(action==='slot-delete'){if(!confirm('Delete this slot and its sign-ups?'))return;await eventsApi('slot-delete',{event:route.id,slot:d.slot});await refresh();tell('Slot deleted.');return;}
     if(action==='event-announce'||action==='event-help'){const r=await eventsApi(action==='event-announce'?'announce':'help',{event:route.id});await refresh();tell(r.notice);return;}
     if(action==='event-hide'){await eventsApi('hide',{event:route.id,hidden:d.hidden==='true'});await refresh();tell('Saved.');return;}
-    if(action==='event-delete'){if(!confirm('Delete this event, its slots and discussion?'))return;await eventsApi('delete',{event:route.id});location.hash='events';return;}
+    if(action==='event-delete'){
+      if(!confirm('Delete “'+event.title+'”? Its sign-up slots and discussion will be removed. This can’t be undone.'))return;
+      await eventsApi('delete',{event:route.id,notify:!!document.querySelector('#notify-cancel')?.checked});location.hash='events';return;
+    }
     if(action==='action-done'){
       await call('/api/meeting',{meeting:d.meeting,action:'action-done'},{action:d.item,done:d.done==='true'});
       await refresh(); tell(d.done==='true'?'Marked done.':'Reopened.'); return;
