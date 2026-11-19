@@ -144,3 +144,46 @@ test('off: topics, sign-ups and discussions disappear from pages members can sti
   assert.equal((await w.ben.posts()).status, 403);
   assert.equal((await w.ben.call('rsvp', {status: 'yes'}, {meeting: M})).status, 200, 'RSVPs always work');
 });
+
+test('notification switches: each kind of email can be turned off; cancellations still come', async () => {
+  const w = await world();
+  const set = async (who, notify) => assert.equal((await w[who].group('profile', {name: who, emails: 'all', digest: 'instant', notify})).status, 200);
+  await set('ana', {meetings: false, proposals: false, calls: false, signups: false});
+  assert.deepEqual((await w.ana.group()).body.me.notify, {meetings: false, proposals: false, calls: false, signups: false});
+  await w.ana.group('profile', {name: 'Ana', emails: 'all', digest: 'instant', notify: {calls: true}});
+  assert.deepEqual((await w.ana.group()).body.me.notify, {meetings: false, proposals: false, calls: true, signups: false}, 'leaving a switch out keeps it');
+  await set('ana', {calls: false});
+  await set('ben', {});
+  const to = () => w.mailer.outbox.map(m => m.to);
+  const flushAll = async () => { const {flush} = await import('../lib/outbox.mjs'); await flush(w.db, w.mailer); };
+
+  w.mailer.outbox.length = 0;
+  const M = (await w.org.call('', {title: 'March meeting', local: local(Date.now() + 5 * DAY), timezone: 'UTC'})).body.id;
+  await flushAll();
+  assert.ok(to().includes('ben@example.org') && !to().includes('ana@example.org'), 'meeting invitation');
+  w.mailer.outbox.length = 0;
+  await w.org.call('delete', {notify: true}, {meeting: M});
+  await flushAll();
+  assert.ok(to().includes('ana@example.org'), 'cancellations always come');
+
+  w.mailer.outbox.length = 0;
+  const P = (await w.ben.proposals('create', {title: 'A fund', days: 7})).body.id;
+  await w.org.proposals('second', {proposal: P});
+  await flushAll();
+  assert.ok(to().includes('ben@example.org') && !to().includes('ana@example.org'), 'proposal opening');
+
+  w.mailer.outbox.length = 0;
+  await w.org.calls('create', {title: 'Zine fund', deadline: new Date(Date.now() + 9 * DAY).toISOString().slice(0, 10)});
+  await flushAll();
+  assert.ok(to().includes('ben@example.org') && !to().includes('ana@example.org'), 'new open call');
+
+  const {remindSlots} = await import('../lib/events.mjs');
+  const E = (await w.org.events('create', {title: 'Install', local: local(Date.now() + 20 * 3600000), timezone: 'UTC'})).body.id;
+  await w.org.events('slot-add', {event: E, label: 'Crew', capacity: 3});
+  const slot = (await w.org.events('', undefined, {event: E})).body.event.slots[0].id;
+  await w.ana.events('claim', {slot}); await w.ben.events('claim', {slot});
+  w.mailer.outbox.length = 0;
+  await remindSlots(w.db, w.mailer, ORIGIN);
+  await flushAll();
+  assert.deepEqual(to(), ['ben@example.org'], 'sign-up reminders');
+});
