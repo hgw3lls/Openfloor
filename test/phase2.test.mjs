@@ -177,3 +177,27 @@ test('inbox: reads unread replies, acts on them, marks them read, and waits 4 mi
   assert.deepEqual(await pollInbox(w.db, act, {Imap: FakeImap}), {skipped: 'polled recently'});
   assert.equal((await pollInbox(w.db, act, {Imap: FakeImap, now: Date.now() + 5 * 60000})).read, 2, 'checks again after 4 minutes');
 });
+
+test('posts: tags and +1 (toggle, counts, view-only blocks it)', async () => {
+  const {setup, fakeMailer, client, member} = await import('./helpers.mjs');
+  const {db} = await setup();
+  const mailer = fakeMailer();
+  const o = await member(db, 'org@example.org', {role: 'organizer', name: 'Olu'});
+  const a = await member(db, 'ana@example.org', {name: 'Ana'});
+  const [org, ana] = [o, a].map(m => client(db, mailer, {session: m.session}));
+  const P = (await ana.posts('create', {title: 'Spare A2 drum?', tag: 'Kit'})).body.id;
+  const Q = (await ana.posts('create', {title: 'Untagged', tag: 'Nonsense'})).body.id;
+  let list = (await org.posts()).body;
+  assert.deepEqual(list.tags, ['General', 'Studio', 'Kit', 'Shows', 'Swap']);
+  assert.deepEqual(Object.fromEntries(list.posts.map(p => [p.title, p.tag])), {'Spare A2 drum?': 'Kit', 'Untagged': 'General'});
+  assert.equal((await org.posts('plus', {post: P, plus: true})).status, 200);
+  await org.posts('plus', {post: P, plus: true});
+  await ana.posts('plus', {post: P, plus: true});
+  list = (await org.posts()).body.posts;
+  assert.deepEqual([list.find(p => p.id === P).plus, list.find(p => p.id === P).myPlus], [2, true]);
+  await org.posts('plus', {post: P, plus: false});
+  const one = (await org.posts('', undefined, {post: P})).body.post;
+  assert.deepEqual([one.tag, one.plus, one.myPlus], ['Kit', 1, false]);
+  await org.group('features', {posts: 'view'});
+  assert.equal((await ana.posts('plus', {post: Q, plus: true})).status, 403, 'view-only can’t +1');
+});

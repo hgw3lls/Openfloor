@@ -396,3 +396,16 @@ body .night-page .n-search input,.night-page form input:not([type=radio]):not([t
 .n-intoday{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--rule-strong)}
 .n-intoday a{display:flex;flex-direction:column;gap:4px;text-decoration:none;min-width:0;font:600 14px Geist,system-ui}
 .n-intoday a span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.n-pcard{display:flex;flex-direction:column;gap:8px;color:inherit!important;text-decoration:none}
+.n-pfoot a{color:inherit!important;text-decoration:none}
+.n-plus{min-height:44px;padding:0 12px;border:1.5px solid var(--ink);background:transparent;color:var(--ink);font:700 11px 'JetBrains Mono',monospace;letter-spacing:.08em;display:inline-grid;place-items:center}
+.n-plus.on{background:var(--ink);color:var(--lime)}
+.n-plus.off{opacity:.6}
+.n-tagpick{border:0;padding:0;margin:4px 0 0;display:flex;flex-wrap:wrap;gap:6px}
+.n-tagpick label{margin:0!important}
+.n-tagpick input{position:absolute;opacity:0}
+.n-tagpick span{display:inline-grid;place-items:center;min-height:38px;padding:0 12px;border:1.5px solid var(--ink);font:700 10px 'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
+.n-tagpick input:checked+span{background:var(--ink);color:var(--lime)}
+.n-tagpick input:focus-visible+span{outline:3px solid var(--purple);outline-offset:2px}
+.night-page .w-sheet .w-sfoot button.w-opt.on,.wall .w-sheet .w-sfoot button.w-opt.on{background:var(--ink);color:var(--lime);border:2px solid var(--ink);min-height:52px;padding:0 18px;margin:0}
+.night-page .w-sheet .w-sfoot button.w-opt.on:disabled{opacity:.4;cursor:default}
