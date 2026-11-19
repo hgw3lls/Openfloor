@@ -378,7 +378,8 @@ function indexItems(){
   }
   if(shown('events'))for(const e of group.upcomingEvents||[]){
     const d=new Date(e.startsAt);
-    items.push({date:d,kind:e.kind==='Event'?'Event':'Event · '+e.kind,title:e.title,href:'#event/'+e.id+(organizer()?'/view':''),meta:[clock(d),e.location].filter(Boolean).join(' · '),mine:e.signedUp||e.mine});
+    items.push({date:d,kind:e.kind==='Event'?'Event':'Event · '+e.kind,title:e.title,href:'#event/'+e.id+(organizer()?'/view':''),meta:[clock(d),e.location,e.goingCount?e.goingCount+' going':''].filter(Boolean).join(' · '),mine:e.signedUp||e.mine||e.going,
+      ...(can('events')?{act:e.going?'Going ✓':'I’m going',on:e.going,action:'n-going',data:{event:e.id,going:String(!e.going)}}:{})});
     for(const s of (group.slots||[]).filter(s=>s.event===e.id)){
       const full=s.people.length>=s.capacity;
       items.push({date:new Date(s.startsAt),kind:'Sign-up',title:s.label,href:'#event/'+e.id+(organizer()?'/view':''),meta:peopleText(s),mine:s.mine,raw:true,
@@ -593,9 +594,10 @@ function minutesView(){
 }
 
 /* Events tab */
+const goingBtn=e=>can('events')&&!e.past?'<button type="button" class="n-btn'+(e.going?' on':'')+'" data-action="n-going" data-event="'+e.id+'" data-going="'+!e.going+'" aria-pressed="'+!!e.going+'">'+(e.going?'Going ✓':'I’m going')+'</button>':'';
 function eventPoster(e,{big=true}={}){
   const d=new Date(e.startsAt), words=e.title.split(/\s+/), last=words.pop();
-  return '<a class="n-poster paper'+(big?' big':'')+'" href="#event/'+e.id+(organizer()?'/view':'')+'"><span class="dot"></span><span class="eyebrow purple">'+esc(dowShort(d)+' '+d.getDate()+' '+monShort(d)+' · '+(e.kind==='Event'?'':e.kind+' ')+clock(d))+'</span><span class="n-show">'+esc(words.join(' '))+(words.length?'<br>':'')+'<em>'+esc(last)+'</em></span><span class="n-foot"><b>'+esc(e.location||'Place to be confirmed')+'</b><b>'+(e.spots?(e.spots-e.taken)+' spots open':'')+'</b></span></a>';
+  return '<a class="n-poster paper'+(big?' big':'')+'" href="#event/'+e.id+(organizer()?'/view':'')+'"><span class="dot"></span><span class="eyebrow purple">'+esc(dowShort(d)+' '+d.getDate()+' '+monShort(d)+' · '+(e.kind==='Event'?'':e.kind+' ')+clock(d))+'</span><span class="n-show">'+esc(words.join(' '))+(words.length?'<br>':'')+'<em>'+esc(last)+'</em></span><span class="n-foot"><b>'+esc(e.location||'Place to be confirmed')+'</b><b>'+[e.goingCount?e.goingCount+' going':'',e.spots?(e.spots-e.taken)+' spots open':''].filter(Boolean).join(' · ')+'</b></span></a>';
 }
 function slotLine(s,{event}={}){
   const full=s.people.length>=s.capacity, ppl=s.people;
@@ -610,9 +612,9 @@ function eventsPage(){
   const slots=first&&shown('signups')?(group.slots||[]).filter(s=>s.event===first.id):[];
   const open=slots.reduce((n,s)=>n+Math.max(0,s.capacity-s.people.length),0);
   nightPage(brandRow()+titleBlock('Coming','up',['SHOWS','WORKSHOPS','OPEN DAYS'])+
-    (first?eventPoster(first):'<p class="w-none">Nothing coming up yet.</p>')+
+    (first?eventPoster(first)+(goingBtn(first)?'<div class="n-pad">'+goingBtn(first)+'</div>':''):'<p class="w-none">Nothing coming up yet.</p>')+
     (slots.length?sectionHead('Help wanted',open+(open===1?' spot open':' spots open'))+slots.map(s=>slotLine(s,{event:first})).join(''):'')+
-    (rest.length?sectionHead('Also on',rest.length+'')+rest.map(e=>{const d=new Date(e.startsAt);return '<a class="n-row" href="#event/'+e.id+(organizer()?'/view':'')+'"><span class="n-day"><b>'+pad2(d.getDate())+'</b><span class="lime">'+esc(dowShort(d)+' '+monShort(d))+'</span></span><span class="n-rowmain"><span class="eyebrow lime">'+esc(e.kind)+'</span>'+esc(e.title)+'<small>'+esc([clock(d),e.location].filter(Boolean).join(' · '))+(e.signedUp?' · You’re helping':'')+'</small></span><span class="lime">→</span></a>';}).join(''):'')+
+    (rest.length?sectionHead('Also on',rest.length+'')+rest.map(e=>{const d=new Date(e.startsAt);return '<div class="w-row"><div class="w-day"><span>'+pad2(d.getDate())+'</span><span class="lime">'+esc(dowShort(d)+' '+monShort(d))+'</span></div><div class="w-items"><div class="w-item"><span class="eyebrow lime">'+esc(e.kind)+'</span><a class="w-ititle" href="#event/'+e.id+(organizer()?'/view':'')+'">'+esc(e.title)+'</a><span class="w-meta">'+esc([clock(d),e.location,e.goingCount?e.goingCount+' going':''].filter(Boolean).join(' · '))+(e.signedUp?' · You’re helping':'')+'</span>'+goingBtn(e).replace('class="n-btn','class="w-act n-btn')+'</div></div></div>';}).join(''):'')+
     (can('events')?'<details class="n-add"><summary>Add an event</summary><form data-form="event-create">'+eventFields()+'<button>Add event</button><p class="n-hint">You can add sign-up slots, like gallery sitting or install crew, on the next page.</p></form></details>':'')+
     (eventList.past.length?sectionHead('Past',eventList.past.length+'')+eventList.past.slice(0,10).map(e=>'<a class="n-row" href="#event/'+e.id+'"><span class="n-rowmain">'+esc(e.title)+'<small>'+esc(e.when)+'</small></span><span class="lime">→</span></a>').join(''):''));
 }
@@ -623,6 +625,8 @@ function eventView(){
   nightPage(backRow('#events','Events',e.kind)+eventPoster({...e,spots:0,taken:0})+
     (e.link?'<p class="n-link"><a href="'+esc(e.link)+'" target="_blank" rel="noopener">'+esc(e.link)+'</a></p>':'')+
     '<p class="n-link">'+esc(e.when)+(e.location?' · '+esc(e.location):'')+'</p>'+
+    sectionHead('Who’s going',e.goingPeople.length+'')+(goingBtn(e)?'<div class="n-pad">'+goingBtn(e)+'</div>':'')+
+      (e.goingPeople.length?'<div class="n-faces">'+e.goingPeople.map((n,i)=>avatar(n,i)).join('')+'</div><p class="n-hint">'+esc(e.goingPeople.join(', '))+'</p>':'<p class="w-none">Nobody yet.'+(goingBtn(e)?' Be the first.':'')+'</p>')+
     (e.description?sectionHead('About')+'<p class="n-body">'+para(e.description)+'</p><p class="n-hint">Added by '+esc(e.author||'a member')+'</p>':'')+
     (slots.length&&shown('signups')?sectionHead('Help wanted',open+(open===1?' spot open':' spots open'))+slots.map(s=>slotLine(s,{event:e})).join(''):'')+
     (e.canEdit&&!preview?'<p class="n-link"><a class="lime" href="#event/'+e.id+'/manage">Manage this event →</a></p>':'')+
@@ -680,6 +684,7 @@ function settingsPage(){
   const me=group.me, mineMeet=group.meetings.upcoming.filter(m=>m.mine==='yes'||m.mine==='maybe');
   const down=[
     ...mineMeet.filter(m=>m.startsAt).map(m=>({d:new Date(m.startsAt),k:'Meeting · '+rsvpLabels[m.mine],t:m.title,h:'#'+m.id+(organizer()?'/view':'')})),
+    ...(group.upcomingEvents||[]).filter(e=>e.going).map(e=>({d:new Date(e.startsAt),k:e.kind+' · Going',t:e.title,h:'#event/'+e.id+(organizer()?'/view':'')})),
     ...(group.slots||[]).filter(s=>s.mine).map(s=>({d:new Date(s.startsAt),k:'Sign-up · '+s.eventTitle,t:s.label,h:'#event/'+s.event})),
     ...(group.openCalls||[]).filter(c=>c.myStatus).map(c=>({d:deadlineDate(c.deadline),k:c.kind+' · '+interestLabels[c.myStatus],t:c.title,h:'#call/'+c.id})),
     ...(group.myActions||[]).map(a=>({d:a.due?deadlineDate(a.due):null,k:'Action item'+(a.due?' · due':''),t:a.title,h:'#'+a.meeting+(organizer()?'/view':'')}))
@@ -801,6 +806,7 @@ async function nightClick(action,d,button){
     await api('rsvp',{status:d.value,reason:''},meeting.id);await reloadMeeting();tell('Saved: '+rsvpLabels[d.value]+'.');return true;
   }
   if(action==='n-rsvp-cancel'){meeting.rsvpReason=false;rerenderMeeting();return true;}
+  if(action==='n-going'){await eventsApi('going',{event:d.event,going:d.going==='true'});if(document.querySelector('.wall:not(.night-page)'))await wallReload();else await refresh();tell(d.going==='true'?'You’re going.':'Taken off the list.');return true;}
   if(action==='n-mfilter'){memberFilter=d.role;directoryPage();document.querySelectorAll('[data-action=n-mfilter]').forEach(b=>b.classList.toggle('on',b.dataset.role===memberFilter));return true;}
   return false;
 }
