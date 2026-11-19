@@ -42,3 +42,16 @@ test('the wall gets what needs the member: unvoted topics, open slots with peopl
   assert.deepEqual([wall.topics, wall.slots, wall.openCalls], [[], [], []]);
   assert.deepEqual((await org.group()).body.topics.map(t => t.label), ['Ana’s idea'], 'organizers still get everything (but not their own topics)');
 });
+
+test('the member directory: everyone active, names and roles, no email addresses', async () => {
+  const {db} = await setup();
+  const mailer = fakeMailer();
+  await member(db, 'org@example.org', {role: 'organizer', name: 'Olu'});
+  const a = await member(db, 'ana@example.org', {name: 'Ana'});
+  await member(db, 'gone@example.org', {name: 'Gone', status: 'removed'});
+  await member(db, 'cara.lee@example.org');
+  const res = await client(db, mailer, {session: a.session}).groupView('directory');
+  assert.deepEqual(res.body.directory.map(m => [m.name, m.role, m.me]), [['Ana', 'member', true], ['cara.lee', 'member', false], ['Olu', 'organizer', false]]);
+  assert.ok(!JSON.stringify(res.body.directory).includes('@'), 'no email addresses');
+  assert.equal((await client(db, mailer).groupView('directory')).body.directory, undefined, 'members only');
+});

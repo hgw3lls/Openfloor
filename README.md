@@ -30,6 +30,16 @@ Members land on **the wall**, a dark "night index" built for phones. It has four
 - **C — Index** lists everything coming up by day: meetings, events, sign-up slots, open-call deadlines and your action items. Each has a one-tap action, and **All / Mine** narrows the list to what involves you.
 - **D — Board** shows the latest posts.
 
+Every member screen uses the same "night index" design:
+- **Meetings:** the next meeting as a purple poster with RSVP buttons, the Suggest / Vote / Agenda steps, topics with ▲/▼ votes, and a "Pin it up" box for suggestions. Members see vote scores only once the agenda is set.
+- **Minutes:** each past meeting's minutes, with who came, what was discussed, the action items poster (tick off your own) and the notes.
+- **Events:** a poster for the next event, help-wanted slots with capacity dots, and an "Also on" list.
+- **Calls:** poster cards with the days left and Interested / Applying / Applied buttons; each call's own page has the key facts and who from the group is going for it.
+- **Members:** a directory of names and roles, with no email addresses.
+- **You:** your profile, everything you're down for, email settings, calendar link and sign out.
+
+Posts, decisions and sign-in follow the same look. The organizer panel and the organizers' manage pages keep the lighter paper style.
+
 A tab bar (Wall, Meetings, Events, Calls) sits at the bottom of the wall and of every page on phones. The initials in the corner open **You**: email settings, the calendar link, add to phone, and sign out. Organizers reach their wall from **Wall** and get back with **Organizer**. The wall follows the feature switches. Fonts (Geist, Instrument Serif, JetBrains Mono, under the SIL Open Font License) are served from the site.
 
 ## On your phone
