@@ -55,3 +55,23 @@ test('the member directory: everyone active, names and roles, no email addresses
   assert.ok(!JSON.stringify(res.body.directory).includes('@'), 'no email addresses');
   assert.equal((await client(db, mailer).groupView('directory')).body.directory, undefined, 'members only');
 });
+
+test('profiles: members set their medium, organizers set role labels; both show in the directory', async () => {
+  const {db} = await setup();
+  const mailer = fakeMailer();
+  const o = await member(db, 'org@example.org', {role: 'organizer', name: 'Olu'});
+  const a = await member(db, 'ana@example.org', {name: 'Ana'});
+  const [org, ana] = [o, a].map(m => client(db, mailer, {session: m.session}));
+  assert.equal((await ana.group('profile', {name: 'Ana Ribeiro', medium: 'Screenprint', emails: 'all', digest: 'daily'})).status, 200);
+  assert.equal((await ana.group('title', {member: a.id, title: 'Treasurer'})).status, 403, 'organizers only');
+  assert.equal((await org.group('title', {member: a.id, title: 'Committee'})).status, 200);
+  const me = (await ana.group()).body.me;
+  assert.deepEqual([me.name, me.medium, me.title], ['Ana Ribeiro', 'Screenprint', 'Committee']);
+  assert.ok(me.since > 0);
+  const dir = (await ana.groupView('directory')).body.directory;
+  assert.deepEqual(dir.map(m => [m.name, m.medium, m.title]), [['Ana Ribeiro', 'Screenprint', 'Committee'], ['Olu', '', '']]);
+  await ana.group('profile', {name: 'Ana Ribeiro', emails: 'all', digest: 'daily'});
+  assert.equal((await ana.group()).body.me.medium, 'Screenprint', 'leaving medium out keeps it');
+  await org.group('title', {member: a.id, title: ''});
+  assert.equal((await ana.group()).body.me.title, '');
+});

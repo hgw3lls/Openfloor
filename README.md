@@ -35,7 +35,7 @@ Every member screen uses the same "night index" design:
 - **Minutes:** each past meeting's minutes, with who came, what was discussed, the action items poster (tick off your own) and the notes.
 - **Events:** a poster for the next event, help-wanted slots with capacity dots, and an "Also on" list.
 - **Calls:** poster cards with the days left and Interested / Applying / Applied buttons; each call's own page has the key facts and who from the group is going for it.
-- **Members:** a directory of names and roles, with no email addresses.
+- **Members:** a directory of names, mediums and roles, with no email addresses. Members add their medium ("Relief, woodcut") on You. Organizers give people a role label like Committee or Treasurer from the Members page; it's just a label and doesn't grant organizer access. You can search by name or technique, and filter by role.
 - **You:** your profile, everything you're down for, email settings, calendar link and sign out.
 
 - **Sign in:** enter your email, then type the 6-digit code from the email on a keypad. It signs you in as soon as the sixth digit is in.
