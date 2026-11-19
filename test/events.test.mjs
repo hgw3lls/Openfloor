@@ -142,3 +142,31 @@ test('organizer panel overview: what needs attention', async () => {
   assert.equal(o.helpWanted[0].title, 'Winter group show');
   assert.ok(o.overview.email.sent_today >= 1);
 });
+
+test('deleting an event: author or organizer, optional cancellation email to the right people', async () => {
+  const w = await world();
+  // Not announced: only the people who signed up are told.
+  const E = await showWithSlots(w);
+  const [sitting] = (await w.org.events('', undefined, {event: E})).body.event.slots;
+  await w.ben.events('claim', {slot: sitting.id});
+  await w.ben.posts('comment', {kind: 'event', target: E, body: 'Looking forward to it'});
+  assert.equal((await w.ben.events('delete', {event: E})).status, 403, 'not Ben’s event');
+  w.mailer.outbox.length = 0;
+  const r = await w.ana.events('delete', {event: E, notify: true});
+  assert.equal(r.body.notice, 'Event deleted. Sending to 1 person.');
+  assert.deepEqual(w.mailer.outbox.map(m => [m.to, m.subject]), [['ben@example.org', 'Cancelled: Winter group show']]);
+  assert.match(w.mailer.outbox[0].text, /your spot has been removed/);
+  assert.equal((await w.ben.events('', undefined, {event: E})).status, 404);
+  for (const t of ['slots', 'claims', 'comments']) assert.equal((await w.pg.query(`SELECT count(*)::int n FROM ${t}`)).rows[0].n, 0, t);
+
+  // Announced to everyone: everyone is told; without notify, nobody is.
+  const F = await showWithSlots(w);
+  await w.org.events('announce', {event: F});
+  w.mailer.outbox.length = 0;
+  assert.equal((await w.org.events('delete', {event: F, notify: true})).body.notice, 'Event deleted. Sending to 3 people.');
+  const G = await showWithSlots(w);
+  await w.org.events('announce', {event: G});
+  w.mailer.outbox.length = 0;
+  assert.equal((await w.org.events('delete', {event: G})).body.notice, 'Event deleted.');
+  assert.equal(w.mailer.outbox.length, 0);
+});
