@@ -21,6 +21,10 @@ Open Floor lets artists submit topics, optionally vote for up to two, and see th
 
 **Topics and voting.** Members suggest topics and vote 👍 or 👎 until the agenda is published, one vote each and never on their own topics. Votes from email count as the same person as votes on the site. Organizers can edit, hide or delete any topic, build the agenda from the top topics, publish it (members get it by email with calendar links), and record and email the outcomes.
 
+## On your phone
+
+The site can be saved to a phone's home screen, where it opens full-screen like an app with the Tower Press icon. Members see an **Add to your phone** panel on their page with the steps: on iPhone, in Safari, use Share → Add to Home Screen; on Android, use the **Install the app** button or Chrome's menu. On iPhone, the home-screen app doesn't share Safari's sign-in. That's why sign-in emails also carry a 6-digit code to type into the app. Each code works once, for 30 minutes, with five tries an hour per address. After that, members stay signed in for a year.
+
 ## Organizer panel and member preview
 
 Organizers land on the **Organizer** panel when they open the site. It shows what needs attention: join requests, overdue and unassigned action items, events still needing helpers, and email problems. Below that are upcoming meetings with RSVP counts, a new-meeting form, the organizers list, quick links, downloads, and email health (sent today against the limit, waiting, retrying, failed, and when replies were last checked).
