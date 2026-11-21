@@ -155,7 +155,7 @@ Every email has an unsubscribe link and the one-click unsubscribe header that Gm
    - `EMAIL_FROM` (optional): defaults to `Open Floor <your Gmail address>`.
    - `EMAIL_REPLY_TO` (optional): where replies to the emails go.
 
-Gmail allows about 500 emails a day, which is plenty for a group. To send from your own domain instead, set `RESEND_API_KEY` and `EMAIL_FROM` (an address on a domain verified in [Resend](https://resend.com)) and leave `SMTP_USER`/`SMTP_PASS` unset. Any other SMTP server also works with `SMTP_HOST` and `SMTP_PORT`.
+Gmail allows about 500 emails a day, which is plenty for a group. To send from your own domain instead, set `RESEND_API_KEY` and `EMAIL_FROM` (an address on a domain verified in [Resend](https://resend.com), for example `Tower Press Artist Group <hello@yourdomain.org>`). Resend is then used for sending whenever both are set. Keep `SMTP_USER`/`SMTP_PASS`: the Gmail inbox still receives and reads replies, and replies to emails without a personal reply address go there too (or to `EMAIL_REPLY_TO` if set). Remove `RESEND_API_KEY` to go back to sending from Gmail. Any other SMTP server also works with `SMTP_HOST` and `SMTP_PORT`.
 
 The daily job runs at 16:00 UTC (see `vercel.json`).
 

@@ -29,3 +29,24 @@ test('Gmail-style SMTP sending: sender, headers, and per-message failures', asyn
 test('no email settings means no mailer', () => {
   assert.equal(createMailer({}), null);
 });
+
+test('Resend is used when its key is set, even with the Gmail login kept for replies', async () => {
+  const calls = [], real = globalThis.fetch;
+  globalThis.fetch = async (url, init) => { calls.push({url, auth: init.headers.Authorization, body: JSON.parse(init.body)}); return new Response('{}', {status: 200}); };
+  try {
+    const mailer = createMailer({RESEND_API_KEY: 're_test', EMAIL_FROM: 'Tower Press <hello@towerpress.test>', SMTP_USER: 'group@gmail.com', SMTP_PASS: 'x'});
+    const plain = to => ({to, subject: 'Hi', html: '<p>Hi</p>', text: 'Hi'});
+    const msgs = [plain('a@example.org'), {...plain('b@example.org'), replyTo: 'group+k0123456789abcdef0123@gmail.com'},
+      {...plain('backup@example.org'), attachments: [{filename: 'backup.json.gz', content: 'AAAA'}]}, plain('c@example.org')];
+    const results = await mailer.sendEach(msgs);
+    assert.deepEqual(results.map(r => r.ok), [true, true, true, true]);
+    assert.deepEqual(calls.map(c => c.url), ['https://api.resend.com/emails/batch', 'https://api.resend.com/emails', 'https://api.resend.com/emails/batch'],
+      'the attachment goes on its own; the rest are batched around it');
+    assert.equal(calls[0].auth, 'Bearer re_test');
+    assert.deepEqual(calls[0].body.map(m => [m.from, m.to[0], m.reply_to]), [
+      ['Tower Press <hello@towerpress.test>', 'a@example.org', 'group@gmail.com'],
+      ['Tower Press <hello@towerpress.test>', 'b@example.org', 'group+k0123456789abcdef0123@gmail.com']], 'replies still reach the Gmail inbox');
+    assert.equal(calls[1].body.attachments[0].filename, 'backup.json.gz');
+    assert.deepEqual(calls[2].body.map(m => m.to[0]), ['c@example.org']);
+  } finally { globalThis.fetch = real; }
+});

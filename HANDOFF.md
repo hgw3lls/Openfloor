@@ -56,7 +56,7 @@ After that, each preview gets its own copy of the database, and testing a previe
 - Check that the first backup email arrives on Sunday with its file attached.
 - Optional:
   - your own web address;
-  - sending email from your own domain through Resend (the code already supports it; it needs `RESEND_API_KEY` and `EMAIL_FROM`).
+  - sending email from your own domain through Resend (set `RESEND_API_KEY` and `EMAIL_FROM` in Vercel once the domain is verified in Resend; keep the Gmail settings for replies).
 
 ## Useful to know
 
