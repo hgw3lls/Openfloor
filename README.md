@@ -126,7 +126,7 @@ The **Calls** page is the group's board of grants, residencies, exhibitions, com
 
 Quoted text, signatures and "Sent from my iPhone" are removed. A reply only counts if it comes from the member's own address and Gmail verified the sender (DMARC, DKIM or SPF); automatic replies are ignored.
 
-The inbox is read when someone opens the site, by a GitHub Action every 10 minutes (`.github/workflows/inbox.yml`), and by the daily job; it is never read more than once every 4 minutes. Gmail IMAP must be on (it is by default). Set `INBOUND=off` to turn replying by email off.
+The inbox is read when someone opens the site, by a cron-job.org job that POSTs to `/api/inbox` every 5 minutes, by a backup GitHub Action (`.github/workflows/inbox.yml`; GitHub often runs it hours late), and by the daily job; it is never read more than once every 4 minutes. Gmail IMAP must be on (it is by default). Set `INBOUND=off` to turn replying by email off.
 
 **Export.** Organizers can download members, meetings with outcomes, and attendance as spreadsheet (CSV) files from the Members page.
 
