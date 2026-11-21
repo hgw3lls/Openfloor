@@ -1,7 +1,9 @@
 name: Check email replies
-# Asks the site to read the group inbox for email replies. The site reads it at
-# most every 4 minutes, so extra pings are harmless. GitHub may run this a few
-# minutes late; replies also get picked up whenever someone opens the site.
+# Backup for the inbox check. The main one is a cron-job.org job (see
+# HANDOFF.md) that POSTs to /api/inbox every 5 minutes, because GitHub often
+# runs this schedule hours late. The site reads the inbox at most every 4
+# minutes, so extra pings are harmless; replies are also picked up whenever
+# someone opens the site.
 on:
   schedule:
     - cron: '*/10 * * * *'

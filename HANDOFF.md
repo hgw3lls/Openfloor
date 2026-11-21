@@ -53,7 +53,7 @@ After that, each preview gets its own copy of the database, and testing a previe
 
 ## Still open
 
-- Reply to a meeting email with "yes" to confirm reply-by-email works end to end.
+- Clearer reply instructions in the emails: say what you can type (yes / maybe / no, "new topic:", +1 / -1, done). The wording is in `lib/email.mjs`.
 - Check that the first backup email arrives on Sunday with its file attached.
 - Optional:
   - a welcome message for members;
@@ -64,7 +64,7 @@ After that, each preview gets its own copy of the database, and testing a previe
 
 - **Hosting and email:**
   - The daily job is at `/api/cron` and needs `CRON_SECRET`.
-  - A GitHub Action checks the inbox every 10 minutes.
+  - **The inbox check (email replies):** a free [cron-job.org](https://console.cron-job.org) job, "Tower Press: check email replies", sends a `POST` to `/api/inbox` every 5 minutes. It emails the account owner after 3 failures in a row. If that account or job goes away, replies still arrive, just slowly: the GitHub Action (`.github/workflows/inbox.yml`) is a backup but in practice GitHub runs it only every few hours, and the site also checks when someone opens it.
   - Email goes through Gmail, up to 400 a day (`EMAIL_DAILY_LIMIT`).
 - **Database schema:** `db/schema.sql` is applied on every build. Only add to it; never change or remove what's there.
 - **Database queries:** all of them use `?` placeholders through `db.prepare(...).bind(...)`.
