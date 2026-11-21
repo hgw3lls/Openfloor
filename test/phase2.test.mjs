@@ -65,7 +65,7 @@ test('replying to a meeting email: RSVP, new topic and discussion; strangers and
   const anaReply = invite('ana@example.org').replyTo, benReply = invite('ben@example.org').replyTo;
   assert.match(anaReply, /^towerpress\+k[a-f0-9]{20}@gmail\.com$/);
   assert.notEqual(anaReply, benReply, 'personal reply addresses');
-  assert.match(invite('ana@example.org').text, /Or just reply to this email/);
+  assert.match(invite('ana@example.org').text, /Use the buttons above to RSVP\. You can also reply to this email/);
 
   assert.equal(await w.reply('Ana <ana@example.org>', anaReply, 'No, because I am at a residency\n\nOn Mon, Tower Press wrote:\n> invite'), 'rsvp: ok');
   assert.equal(await w.reply('ben@example.org', benReply, 'New topic: Zine fair\nShould we table at it?'), 'topic: ok');
