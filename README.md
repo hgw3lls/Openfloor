@@ -161,6 +161,18 @@ The daily job runs at 16:00 UTC (see `vercel.json`).
 
 Emails are queued and sent in the background, so nobody waits on Gmail. Failed sends are retried (up to 5 attempts). To stay under Gmail's limit, at most `EMAIL_DAILY_LIMIT` emails (default 400) go out in any 24 hours; anything over that waits for the next run instead of being dropped. Email sign-ups are rate-limited and have a hidden spam trap.
 
+## Backups
+
+Every Sunday the daily job emails a backup to the group inbox (or to `BACKUP_TO` if set): one gzipped JSON file containing every member, meeting, topic, post, event, call and proposal. Sign-in data, the outbox, and secret links are left out. Organizers can also download one any time from the organizer panel (**Full backup**).
+
+To restore, make a fresh Neon branch or database and run:
+
+```
+DATABASE_URL=... node scripts/restore.mjs tower-press-backup-YYYY-MM-DD.json.gz
+```
+
+Members' old email links stop working after a restore. They sign in again by email.
+
 ## Development
 
 ```sh
