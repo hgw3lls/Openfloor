@@ -55,7 +55,6 @@ After that, each preview gets its own copy of the database, and testing a previe
 
 - Check that the first backup email arrives on Sunday with its file attached.
 - Optional:
-  - a welcome message for members;
   - your own web address;
   - sending email from your own domain through Resend (the code already supports it; it needs `RESEND_API_KEY` and `EMAIL_FROM`).
 
