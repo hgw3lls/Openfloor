@@ -229,3 +229,32 @@ test('the wall sheet escapes the meeting place', () => {
   const app = readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
   assert.match(app, /body:esc\(\[clock\(d\)\+\(m\.location/);
 });
+
+test('removing someone also clears their call interest and their votes on open proposals', async () => {
+  const w = await world();
+  const run = (sql, ...a) => w.db.prepare(sql).bind(...a).run();
+  await run("INSERT INTO calls (id,title,deadline,created) VALUES ('c1','Grant','2027-01-01',0)");
+  await run("INSERT INTO call_interest (call,member,status,updated) VALUES ('c1',?,'applying',0)", w.b.id);
+  await run("INSERT INTO call_checks (call,member,item) VALUES ('c1',?,0)", w.b.id);
+  await run("INSERT INTO proposals (id,number,title,status,created) VALUES ('p1',1,'Open one','open',0),('p2',2,'Closed one','passed',0)");
+  await run("INSERT INTO proposal_votes (proposal,member,vote,updated) VALUES ('p1',?,'for',0),('p2',?,'for',0)", w.b.id, w.b.id);
+  assert.equal((await w.org.group('remove', {member: w.b.id})).status, 200);
+  const n = async (sql) => (await w.db.prepare(sql).bind(w.b.id).first()).n;
+  assert.equal(await n('SELECT COUNT(*)::integer AS n FROM call_interest WHERE member=?'), 0);
+  assert.equal(await n('SELECT COUNT(*)::integer AS n FROM call_checks WHERE member=?'), 0);
+  assert.equal(await n("SELECT COUNT(*)::integer AS n FROM proposal_votes WHERE member=? AND proposal='p1'"), 0, 'open vote taken back');
+  assert.equal(await n("SELECT COUNT(*)::integer AS n FROM proposal_votes WHERE member=? AND proposal='p2'"), 1, 'decided votes stay on record');
+});
+
+test('the join form gives the same reply whether or not the address is on the list', async () => {
+  const w = await world();
+  await member(w.db, 'ivy@example.org', {status: 'invited'});
+  await member(w.db, 'gone@example.org', {status: 'removed'});
+  const ask = (email, i) => client(w.db, w.mailer, {ip: '192.0.2.' + i}).group('join', {email, name: 'Someone'});
+  const replies = [];
+  for (const [i, email] of ['ana@example.org', 'ivy@example.org', 'gone@example.org', 'new@example.org', 'new@example.org'].entries()) {
+    const r = await ask(email, i);
+    replies.push(JSON.stringify([r.status, r.body]));
+  }
+  assert.equal(new Set(replies).size, 1, replies.join('\n'));
+});
