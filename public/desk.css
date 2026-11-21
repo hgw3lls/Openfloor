@@ -1,0 +1,61 @@
+/* The organizer pages (organizer panel, members, meeting and event manage
+   pages) in the same "night index" look as the member pages: ink background,
+   paper text, lime accents, uppercase Geist titles and mono labels.
+   Everything is scoped to body:not(.night) so member pages are untouched. */
+body:not(.night){--line:rgba(243,241,233,.22);--rule-strong:rgba(243,241,233,.35);--soft:rgba(243,241,233,.72);--warn:#e8a6a0;color-scheme:dark;background:var(--ink);color:var(--paper)}
+body:not(.night) a{color:var(--lime)}
+
+/* Header and navigation */
+body:not(.night) header{border-bottom:3px solid var(--paper)}
+body:not(.night) header a.brand{color:var(--paper);font-size:1.05rem;letter-spacing:-.03em}
+body:not(.night) header a.brand:before{background:var(--lime);width:12px;height:12px}
+body:not(.night) header a.brand:after{content:"Artist Group";font:italic 400 1.25rem 'Instrument Serif',Georgia,serif;letter-spacing:0;color:var(--lime);margin-left:6px}
+body:not(.night) #nav a{color:var(--paper);font:700 11px 'JetBrains Mono',ui-monospace,monospace;letter-spacing:.1em;text-transform:uppercase}
+body:not(.night) #nav a.on{color:var(--lime);text-decoration:none;box-shadow:inset 0 -2px 0 var(--lime)}
+body:not(.night) #nav .who{color:var(--soft)}
+body:not(.night) #banner:not(:empty){background:var(--lime);color:var(--ink);border-bottom:0}
+
+/* Titles */
+body:not(.night) .hero{border-bottom:3px solid var(--paper);padding:34px 0 22px}
+body:not(.night) h1{font:700 clamp(3rem,13vw,5.6rem)/.84 Geist,system-ui,sans-serif;letter-spacing:-.06em;text-transform:uppercase;color:var(--paper)}
+body:not(.night) h2{font:italic 400 2.1rem/1 'Instrument Serif',Georgia,serif;letter-spacing:-.02em;color:var(--lime)}
+body:not(.night) h3{font:700 11px 'JetBrains Mono',ui-monospace,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--paper);margin:20px 0 8px}
+body:not(.night) .mono{color:var(--lime)}
+body:not(.night) .phase{background:var(--lime);color:var(--ink);font:700 11px 'JetBrains Mono',ui-monospace,monospace;letter-spacing:.1em;text-transform:uppercase}
+body:not(.night) .muted,body:not(.night) .comments .meta,body:not(.night) .slot .who,body:not(.night) .full{color:var(--soft)}
+body:not(.night) .steps,body:not(.night) .tag,body:not(.night) .when a{color:var(--lime)}
+
+/* Panels: rules instead of boxes, as on the member pages */
+body:not(.night) .panel{background:transparent;border:0;border-top:3px solid var(--paper);padding:20px 0 8px;margin:28px 0 0}
+body:not(.night) .admin{border:0;border-top:3px solid var(--lime)}
+/* A section straight after the title shares the title's rule. */
+body:not(.night) .hero+.panel{border-top:0;margin-top:0;padding-top:4px}
+body:not(.night) details.panel summary,body:not(.night) details.talk summary,body:not(.night) details.draft summary{color:var(--lime);font:700 11px 'JetBrains Mono',ui-monospace,monospace;letter-spacing:.1em;text-transform:uppercase}
+body:not(.night) .draft{border-top:1px solid var(--line)}
+body:not(.night) .orgbar{background:transparent;border:1.5px solid var(--lime)}
+body:not(.night) .orgbar strong{color:var(--lime)}
+body:not(.night) .stat{background:transparent;border:1.5px solid var(--rule-strong)}
+body:not(.night) .stat b{font:700 2.4rem/1 Geist,system-ui,sans-serif;letter-spacing:-.05em;color:var(--lime);margin-bottom:4px}
+body:not(.night) .stat a{color:var(--paper)}
+
+/* Lists and rows */
+body:not(.night) .topic,body:not(.night) .subs li,body:not(.night) .card,body:not(.night) .slot,body:not(.night) .comments li,body:not(.night) .levels{border-bottom-color:var(--line)}
+body:not(.night) .card:hover strong{color:var(--lime)}
+body:not(.night) .chip{border-color:var(--lime);color:var(--lime);font:700 10px 'JetBrains Mono',ui-monospace,monospace;letter-spacing:.08em;text-transform:uppercase}
+body:not(.night) .chip.rsvp-yes{background:var(--lime);border-color:var(--lime);color:var(--ink)}
+body:not(.night) .chip.rsvp-no,body:not(.night) .late,body:not(.night) .status{color:var(--warn);border-color:var(--warn)}
+body:not(.night) .chip.todo{background:var(--purple);border-color:var(--purple);color:var(--paper)}
+
+/* Forms */
+body:not(.night) label,body:not(.night) fieldset.stack legend{color:var(--paper)}
+body:not(.night) input:not([type=checkbox]):not([type=radio]),body:not(.night) textarea,body:not(.night) select{background:transparent;color:var(--paper);border:1.5px solid var(--paper);min-height:46px}
+body:not(.night) select option{color:var(--ink);background:var(--paper)}
+body:not(.night) input[type=checkbox],body:not(.night) input[type=radio]{accent-color:var(--lime)}
+body:not(.night) ::placeholder{color:var(--paper);opacity:.45}
+
+/* Buttons: lime fill, lime outline for secondary, mono labels */
+body:not(.night) button,body:not(.night) a.button{background:var(--lime);color:var(--ink);border:2px solid var(--lime);font:700 11px 'JetBrains Mono',ui-monospace,monospace;letter-spacing:.08em;text-transform:uppercase;border-radius:0}
+body:not(.night) button.alt,body:not(.night) a.button.alt,body:not(.night) .votes button[aria-pressed=false]{background:transparent;color:var(--lime)}
+body:not(.night) .votes button[aria-pressed=true]{background:var(--lime);color:var(--ink)}
+body:not(.night) button.link{background:none;border:0;color:var(--warn);font:inherit;text-transform:none;letter-spacing:0}
+body:not(.night) button:focus-visible,body:not(.night) a:focus-visible,body:not(.night) input:focus-visible,body:not(.night) textarea:focus-visible,body:not(.night) select:focus-visible{outline:3px solid var(--paper);outline-offset:3px}
