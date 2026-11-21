@@ -53,7 +53,6 @@ After that, each preview gets its own copy of the database, and testing a previe
 
 ## Still open
 
-- Clearer reply instructions in the emails: say what you can type (yes / maybe / no, "new topic:", +1 / -1, done). The wording is in `lib/email.mjs`.
 - Check that the first backup email arrives on Sunday with its file attached.
 - Optional:
   - a welcome message for members;
