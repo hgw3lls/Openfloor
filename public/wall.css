@@ -222,7 +222,7 @@ span.n-box{opacity:.55}
 .n-slot>span:first-child{display:flex;flex-direction:column;gap:4px;min-width:0}
 .n-slot strong{font:600 16px/1.25 Geist,system-ui}
 .n-slot small{font-size:12px;opacity:.75;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.n-slot.full{opacity:.55}
+.n-slot.full{opacity:.75}
 .n-dots{display:inline-flex;gap:4px}
 .n-dots i{width:12px;height:12px;border-radius:50%;border:1.5px solid var(--paper)}
 .n-dots i.on{background:var(--paper)}.n-dots i.me{background:var(--lime);border-color:var(--lime)}

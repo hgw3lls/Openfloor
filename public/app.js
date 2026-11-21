@@ -445,7 +445,7 @@ function sheetHtml(){
     const m=group.meetings.upcoming.find(x=>x.id===wallSheet.meeting)||group.meetings.upcoming.find(x=>x.startsAt);
     if(!m)return '';
     const d=new Date(m.startsAt);
-    s={kind:'Meeting · '+dueLike(m.startsAt),title:'Can you make it?',body:[clock(d)+(m.location?', '+m.location:''),m.going+' going'].join('. ')+'.',
+    s={kind:'Meeting · '+dueLike(m.startsAt),title:'Can you make it?',body:esc([clock(d)+(m.location?', '+m.location:''),m.going+' going'].join('. ')+'.'),
       opts:wallReason?'<form class="w-reason" data-form="w-sheet-reason"><label>Why can’t you make it? <small>(only organizers see this)</small><textarea name="reason" required maxlength="500" rows="2"></textarea></label><button class="w-opt on">Send</button></form>'
         :Object.entries(rsvpLabels).map(([k,l])=>'<button type="button" class="w-opt'+(m.mine===k?' on':'')+'" data-action="w-sheet-rsvp" data-meeting="'+m.id+'" data-value="'+k+'">'+l+'</button>').join(''),
       link:'<a href="#'+m.id+(organizer()?'/view':'')+'">Meeting page, topics and agenda →</a>'};
