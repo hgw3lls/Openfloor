@@ -17,7 +17,7 @@ Open Floor lets artists submit topics, optionally vote for up to two, and see th
 
 **Meetings.** Organizers create meetings from the dashboard: name, date and time, time zone, length, place, and whether the meeting repeats weekly, every two weeks or monthly (same weekday). Every member gets an email with RSVP buttons. Repeating meetings create the next one automatically after each meeting ends.
 
-**RSVP.** Members answer Going, Maybe or Can't make it, on the site or with one tap from email. Declining needs a reason, which only organizers see. Organizers see who's coming, who declined and why, and who hasn't answered, and can email a reminder to people who haven't answered.
+**RSVP.** Members answer Going, Maybe or Can't make it, on the site or with one tap from email. Declining needs a reason, which only organizers see. Organizers see who's coming, who declined and why, and who hasn't answered, and can email a reminder to people who haven't answered. Meeting emails also have an **Answer in one form** button: one page with the RSVP, a 👍 / 👎 / no-vote choice for each topic, a box to suggest a topic and a box to comment, all sent with one button. Like every email link, opening it changes nothing until Send is pressed.
 
 **Topics and voting.** Members suggest topics and vote 👍 or 👎 until the agenda is published, one vote each and never on their own topics. Votes from email count as the same person as votes on the site. Organizers can edit, hide or delete any topic, build the agenda from the top topics, publish it (members get it by email with calendar links), and record and email the outcomes.
 
