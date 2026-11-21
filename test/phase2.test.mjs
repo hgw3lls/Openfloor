@@ -65,7 +65,14 @@ test('replying to a meeting email: RSVP, new topic and discussion; strangers and
   const anaReply = invite('ana@example.org').replyTo, benReply = invite('ben@example.org').replyTo;
   assert.match(anaReply, /^towerpress\+k[a-f0-9]{20}@gmail\.com$/);
   assert.notEqual(anaReply, benReply, 'personal reply addresses');
-  assert.match(invite('ana@example.org').text, /Use the buttons above to RSVP\. You can also reply to this email/);
+  const hint = invite('ana@example.org').text;
+  assert.match(hint, /Use the buttons above to RSVP\. Or reply to this email, starting with:/);
+  assert.match(invite('ana@example.org').html, /<li><strong[^>]*>yes<\/strong> if you’re going<\/li>/);
+  // Every word the email lists must do what it says, not fall through to a comment.
+  const words = [...hint.matchAll(/^- (\S+(?: topic:)?) /gm)].map(m => m[1]);
+  assert.deepEqual(words, ['yes', 'maybe', 'no', 'new topic:']);
+  for (const word of words) assert.ok(!('comment' in shortcut('meeting', word + ' Zine fair')), word);
+  assert.ok(shortcut('action', 'done').done);
 
   assert.equal(await w.reply('Ana <ana@example.org>', anaReply, 'No, because I am at a residency\n\nOn Mon, Tower Press wrote:\n> invite'), 'rsvp: ok');
   assert.equal(await w.reply('ben@example.org', benReply, 'New topic: Zine fair\nShould we table at it?'), 'topic: ok');
