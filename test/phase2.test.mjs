@@ -155,27 +155,44 @@ test('export: organizers only, and cells can’t run as spreadsheet formulas', a
   assert.match(text, /"'=HYPERLINK/);
 });
 
-test('inbox: reads unread replies, acts on them, marks them read, and waits 4 minutes between checks', async () => {
+test('inbox: finds replies by their reply address (read or not), acts once, ignores other mail, waits 4 minutes', async () => {
   const w = await world();
   const created = await w.org.call('', {title: 'Spring show', local: local(new Date(Date.now() + 10 * 86400000)), timezone: 'UTC'});
   const to = w.mailer.outbox.find(m => m.to === 'ana@example.org').replyTo;
-  const box = {messages: new Map([[11, raw({from: 'ana@example.org', to, body: 'yes'})], [12, raw({from: 'ana@example.org', to, body: 'See you there'})]]), seen: []};
+  // Like Gmail: search can't pick out "+k" addresses, so the code must filter by envelope itself.
+  const mail = (uid, args, seen = false) => [uid, {raw: raw(args), to: args.to, seen}];
+  const box = {messages: new Map([
+    mail(10, {from: 'ana@example.org', to: 'group@example.org', body: 'yes'}),          // not a reply address: left alone
+    mail(11, {from: 'ana@example.org', to, body: 'yes'}),
+    mail(12, {from: 'ana@example.org', to, body: 'See you there'}, true)                 // opened in Gmail first: still counts
+  ]), seen: [], searches: []};
   class FakeImap {
     async connect() {} async logout() {}
     async getMailboxLock() { return {release() {}}; }
-    async search(query) { assert.deepEqual(query, {seen: false, to: '+k'}); return [...box.messages.keys()]; }
-    async fetchOne(uid) { return {source: Buffer.from(box.messages.get(Number(uid)))}; }
+    async search(query) { box.searches.push(query); return [...box.messages.keys()]; }
+    async *fetch(uids, query) {
+      assert.ok(query.envelope);
+      for (const uid of uids) {
+        const m = box.messages.get(uid), id = /Message-ID: (\S+)/.exec(m.raw)[1];
+        yield {uid, envelope: {to: [{address: m.to}], messageId: id}};
+      }
+    }
+    async fetchOne(uid) { return {source: Buffer.from(box.messages.get(Number(uid)).raw)}; }
     async messageFlagsAdd(uid, flags) { box.seen.push([Number(uid), flags]); }
   }
   const act = emailActions(w.db, {mailer: w.mailer, base: ORIGIN});
   const report = await pollInbox(w.db, act, {Imap: FakeImap});
   assert.deepEqual(report.done, ['rsvp: ok', 'comment: ok']);
+  assert.ok(box.searches[0].since instanceof Date && !('seen' in box.searches[0]) && !('to' in box.searches[0]));
   assert.deepEqual(box.seen, [[11, ['\\Seen']], [12, ['\\Seen']]]);
   const view = (await w.org.get({meeting: created.body.id})).body;
   assert.deepEqual(view.attendance.going, ['Ana']);
   assert.equal(view.discussion[0].body, 'See you there');
   assert.deepEqual(await pollInbox(w.db, act, {Imap: FakeImap}), {skipped: 'polled recently'});
-  assert.equal((await pollInbox(w.db, act, {Imap: FakeImap, now: Date.now() + 5 * 60000})).read, 2, 'checks again after 4 minutes');
+  const again = await pollInbox(w.db, act, {Imap: FakeImap, now: Date.now() + 5 * 60000});
+  assert.equal(again.read, 0, 'checks again after 4 minutes, but handles each reply once');
+  box.messages.set(...mail(13, {from: 'ana@example.org', to, body: 'Bringing snacks'}));
+  assert.deepEqual((await pollInbox(w.db, act, {Imap: FakeImap, now: Date.now() + 10 * 60000})).done, ['comment: ok']);
 });
 
 test('posts: tags and +1 (toggle, counts, view-only blocks it)', async () => {
