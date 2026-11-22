@@ -13,8 +13,13 @@ body.night main{max-width:560px;padding:0 0 130px}
 
 /* Brand and hero */
 .w-brand{display:flex;justify-content:space-between;align-items:center;padding:18px 18px 0}
-.w-mark{display:flex;align-items:center}
-.w-mark img{display:block;height:40px;width:auto}
+.w-mark{display:flex;align-items:center;gap:9px;font:800 16px Geist,system-ui;letter-spacing:-.03em}
+.w-mark:before{content:"";width:12px;height:12px;background:var(--lime);transform:rotate(-12deg)}
+.w-mark:has(img):before{content:none}
+.w-mark img.logo{display:block;height:40px;width:auto;max-width:220px}
+.n-badge{display:flex;flex-direction:column;align-items:center;gap:10px;margin:30px 16px 6px;color:var(--lime)}
+.n-badge img{display:block;width:min(240px,62vw);height:auto}
+.w-mark em{font:italic 400 19px 'Instrument Serif',serif;letter-spacing:0;color:var(--lime)}
 .w-right{display:flex;align-items:center;gap:10px}
 .w-org{font:700 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--lime)!important;text-decoration:none;border:1.5px solid var(--lime);padding:8px 10px;min-height:36px;display:grid;place-items:center}
 .w-avatar{width:36px;height:36px;border-radius:50%;background:var(--lime);color:var(--ink)!important;display:grid;place-items:center;font:700 13px Geist,system-ui;text-decoration:none}
@@ -312,8 +317,10 @@ body .night-page .n-search input,.night-page form input:not([type=radio]):not([t
 @media(max-width:380px){.n-num{font-size:84px}.n-show{font-size:44px}.n-show em{font-size:50px}.n-left b{font-size:104px}}
 
 /* ---------- Sign in, posts, post, decisions log ---------- */
-.n-badge{display:flex;flex-direction:column;align-items:center;gap:10px;margin:30px 16px 6px;color:var(--lime)}
-.n-badge img{display:block;width:min(240px,62vw);height:auto}
+.n-brandposter{margin-top:34px;gap:6px}
+.n-brandposter .sq{position:absolute;right:-14px;top:30px;width:66px;height:66px;background:var(--purple);transform:rotate(14deg)}
+.n-tp{font:700 64px/.84 Geist,system-ui;letter-spacing:-.07em;text-transform:uppercase}
+.n-org.purple{color:var(--purple);font-size:30px}
 .n-signin{display:flex;flex-direction:column;gap:12px;padding:34px 18px 0}
 .n-signin label{margin:0!important}
 .night-page .n-signin input.n-serif{border:0!important;border-bottom:3px solid var(--paper)!important;font:italic 400 28px 'Instrument Serif',serif!important;padding:8px 0!important;margin-top:16px!important;background:transparent!important;color:var(--paper)!important}

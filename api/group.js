@@ -12,7 +12,7 @@ export default {
     }
     try {
       // Opening the site also picks up email replies (at most every 4 minutes).
-      if (request.method === 'GET') waitUntil(checkReplies(postgres(DATABASE_URL), {request}).catch(error => console.error('Inbox check failed', error.code ?? error.name)));
+      if (request.method === 'GET' && !new URL(request.url).searchParams.has('logo')) waitUntil(checkReplies(postgres(DATABASE_URL), {request}).catch(error => console.error('Inbox check failed', error.code ?? error.name)));
       return await group(request, postgres(DATABASE_URL), ORGANIZER_KEY.trim(), createMailer(), waitUntil);
     } catch (error) {
       console.error('Group request failed', error.code ?? error.name);
