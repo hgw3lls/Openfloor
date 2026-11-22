@@ -469,7 +469,7 @@ function wall(){
   const me=group.me, now=new Date();
   document.body.classList.add('night');
   root.innerHTML='<div class="wall">'+
-    '<div class="w-brand"><span class="w-mark">Tower Press <em>Artist Group</em></span><span class="w-right">'+(realOrganizer()&&!preview?'<a class="w-org" href="/">Organizer</a>':'')+'<a class="w-avatar" href="#settings" aria-label="Your settings">'+esc(initials(me))+'</a></span></div>'+
+    '<div class="w-brand"><span class="w-mark"><img src="/brand/lockup.png" alt="Tower Press Artist Group" width="141" height="40"></span><span class="w-right">'+(realOrganizer()&&!preview?'<a class="w-org" href="/">Organizer</a>':'')+'<a class="w-avatar" href="#settings" aria-label="Your settings">'+esc(initials(me))+'</a></span></div>'+
     '<div class="w-hero"><h1>On the<br><em>wall</em></h1><div class="w-date">'+esc(now.toLocaleDateString('en-GB',{weekday:'short'}).toUpperCase())+'<br>'+pad2(now.getDate())+'.'+pad2(now.getMonth()+1)+'.'+String(now.getFullYear()).slice(2)+'<br><span class="lime">WK '+isoWeek(now)+'</span></div></div>'+
     inTodayStrip()+
     '<section aria-label="Needs you" id="w-a">'+deckHtml()+'</section>'+
@@ -537,7 +537,7 @@ const outcomeText=o=>!o?'':({carried:'Carried',not_carried:'Not carried',agreed:
 const nightPages=new Set(['proposal','home','me','meetings','meeting','events','event','calls','call','settings','group','board','post','decisions','welcome']);
 function brandRow(){
   const me=group?.me;
-  return '<div class="w-brand"><a class="w-mark" href="'+(organizer()?'#me':'/')+'">Tower Press <em>Artist Group</em></a><span class="w-right">'+(realOrganizer()&&!preview?'<a class="w-org" href="/">Organizer</a>':'')+(me?'<a class="w-avatar" href="#settings" aria-label="You">'+esc(initials(me))+'</a>':'')+'</span></div>';
+  return '<div class="w-brand"><a class="w-mark" href="'+(organizer()?'#me':'/')+'"><img src="/brand/lockup.png" alt="Tower Press Artist Group" width="141" height="40"></a><span class="w-right">'+(realOrganizer()&&!preview?'<a class="w-org" href="/">Organizer</a>':'')+(me?'<a class="w-avatar" href="#settings" aria-label="You">'+esc(initials(me))+'</a>':'')+'</span></div>';
 }
 function backRow(href,label,context=''){
   return '<div class="n-back"><a href="'+href+'">← '+esc(label)+'</a><span>'+esc(context)+'</span></div>';
@@ -755,7 +755,7 @@ function settingsPage(){
 /* Sign in (screen 09): email, then a 6-digit code with a keypad. */
 let signStep='email', signAddr='', signCode='', signName='';
 function welcome(){
-  const poster='<div class="n-poster lime n-brandposter"><span class="tape"></span><span class="sq"></span><span class="eyebrow">Members only</span><span class="n-tp">Tower<br>Press</span><em class="n-org purple">Artist Group</em></div>';
+  const poster='<div class="n-badge"><img src="/brand/badge.png" alt="Tower Press Artist Group" width="240" height="240"><span class="eyebrow">Members only</span></div>';
   const setup='<form data-form="setup"><label>Organizer key<input type="password" name="organizerKey" required autocomplete="off"></label><label>Your name<input name="name" maxlength="80" required></label><label>Your email<input type="email" name="email" required maxlength="254"></label><button>Set up and sign in</button></form>';
   let body;
   if(signStep==='in'){
