@@ -7,6 +7,10 @@ body:not(.night) a{color:var(--lime)}
 
 /* Header and navigation */
 body:not(.night) header{border-bottom:3px solid var(--paper)}
+body:not(.night) header a.brand{color:var(--paper);font-size:1.05rem;letter-spacing:-.03em}
+body:not(.night) header a.brand:before{background:var(--lime);width:12px;height:12px}
+body:not(.night) header a.brand:has(img):after{content:none}
+body:not(.night) header a.brand:after{content:"Artist Group";font:italic 400 1.25rem 'Instrument Serif',Georgia,serif;letter-spacing:0;color:var(--lime);margin-left:6px}
 body:not(.night) #nav a{color:var(--paper);font:700 11px 'JetBrains Mono',ui-monospace,monospace;letter-spacing:.1em;text-transform:uppercase}
 body:not(.night) #nav a.on{color:var(--lime);text-decoration:none;box-shadow:inset 0 -2px 0 var(--lime)}
 body:not(.night) #nav .who{color:var(--soft)}

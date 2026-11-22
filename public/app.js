@@ -52,6 +52,9 @@ async function request(path,params,payload){
 }
 const api=(action='',payload,meetingId=route.id||meeting?.id)=>request('/api/meeting',{meeting:meetingId||'',action},payload);
 const groupApi=(action='',payload,params={})=>request('/api/group',{action,...params},payload);
+// The group's logo, when an organizer has uploaded one and switched it on; otherwise the name as text.
+const logo=slot=>group?.branding?.[slot]||'';
+const wordmark=()=>logo('wide')?'<img class="logo" src="'+esc(logo('wide'))+'" alt="'+esc(group.group||'Tower Press Artist Group')+'">':'Tower Press <em>Artist Group</em>';
 const postsApi=(action='',payload,params={})=>request('/api/posts',{action,...params},payload);
 const eventsApi=(action='',payload,params={})=>request('/api/events',{action,...params},payload);
 const callsApi=(action='',payload,params={})=>request('/api/calls',{action,...params},payload);
@@ -61,7 +64,8 @@ function hero(title,subtitle,badge='',extra=''){
   return '<section class="hero">'+(badge?'<span class="mono phase">'+badge+'</span>':'')+'<h1>'+esc(title)+'</h1>'+(subtitle?'<p>'+esc(subtitle)+'</p>':'')+extra+'</section>';
 }
 function header(){
-  const me=group?.me;
+  const me=group?.me, brand=document.querySelector('header a.brand');
+  if(brand)brand.innerHTML=logo('wide')?wordmark():'Tower Press';
   if(!me){nav.innerHTML='<a href="/">Sign in</a>';banner.innerHTML='';tabs.innerHTML='';return;}
   const link=(href,label,page,dup)=>'<a href="'+href+'" class="'+(route.page===page?'on':'')+(dup?' dup':'')+'">'+label+'</a>';
   const wallHref=organizer()?'#me':'/', onWall=organizer()?route.page==='me':route.page==='home'||route.page==='me';
@@ -151,7 +155,7 @@ function organize(){
     '<section class="panel admin"><h2>Needs attention</h2>'+(attention.length?'<ul class="attention">'+attention.join('')+'</ul>':'<p class="muted">Nothing right now.</p>')+'</section>'+
     '<section class="panel"><h2>Meetings</h2>'+(o.meetings.length?'<ul class="subs">'+o.meetings.map(x=>'<li><span><strong>'+esc(x.title)+'</strong> <span class="muted">'+esc(x.when)+' · '+x.going+' going · '+x.maybe+' maybe · '+x.declined+' can’t · '+x.noAnswer+' no answer · '+x.topics+(x.topics===1?' topic':' topics')+'</span></span><span class="actions"><a class="button alt small" href="#'+x.id+'/view">Member page</a><a class="button small" href="#'+x.id+'">Manage</a></span></li>').join('')+'</ul>':'<p class="muted">No upcoming meetings.</p>')+
       '<details class="draft"><summary>New meeting</summary><form data-form="new-meeting"><p class="muted">Everyone on the member list gets an email with RSVP buttons.</p><label>Name<input name="title" required maxlength="100" placeholder="Monthly members meeting"></label>'+timeFields({timezone:zone(),duration:90})+'<button>Create and invite members</button></form></details></section>'+
-    organizersPanel()+featuresPanel()+
+    organizersPanel()+featuresPanel()+brandingPanel()+
     '<section class="panel"><h2>Quick links</h2><div class="actions"><a class="button alt" href="#members">Members and invitations</a><a class="button alt" href="#events">Events and sign-ups</a><a class="button alt" href="#decisions">Decisions</a></div>'+
       '<h3>Download</h3><div class="actions"><a class="button alt" href="/api/export?what=members">Members</a><a class="button alt" href="/api/export?what=meetings">Meetings and outcomes</a><a class="button alt" href="/api/export?what=attendance">Attendance</a><a class="button alt" href="/api/export?what=backup">Full backup</a></div></section>'+
     '<section class="panel"><h2>Email</h2><p>'+e.sent_today+' sent in the last 24 hours (limit '+e.limit+') · '+e.waiting+' waiting · '+e.retrying+' being retried · '+e.failed+' failed</p><p class="muted">Email replies last checked '+esc(checked)+'. '+m.no_email+(m.no_email===1?' member has':' members have')+' email turned off.</p></section>'+
@@ -162,6 +166,18 @@ function featuresPanel(){
   const pick=(f,v,label)=>'<label class="pick"><input type="radio" name="'+f.key+'" value="'+v+'"'+((now[f.key]||'full')===v?' checked':'')+'> <span><strong>'+label+'</strong><br><span class="muted">'+esc(f[v])+'</span></span></label>';
   return '<section class="panel"><h2>What members can use</h2><p class="muted">Turn features off, or make them view-only, for everyone who isn’t an organizer. Organizers always have everything. RSVPs and action items are always on. Use <strong>Preview as member</strong> to check the result.</p>'+
     '<form data-form="features">'+list.map(f=>'<fieldset class="stack"><legend>'+esc(f.label)+'</legend><div class="levels">'+pick(f,'full','On')+pick(f,'view','View only')+pick(f,'off','Off')+'</div></fieldset>').join('')+'<button>Save</button></form></section>';
+}
+function brandingPanel(){
+  const b=group.brandingAdmin;
+  if(!b)return '';
+  const slot=(key,title,hint)=>'<div class="logo-slot"><h3>'+title+'</h3><p class="muted">'+hint+'</p>'+
+    (b[key]?'<img class="logo-preview'+(key==='square'?' square':'')+'" src="'+esc(b[key])+'" alt="">':'<p class="muted">Nothing uploaded.</p>')+
+    '<form data-form="logo-upload" data-slot="'+key+'" class="inline-form"><input type="file" name="file" accept="image/png,image/jpeg,image/webp,image/gif" required><button class="alt">'+(b[key]?'Replace':'Upload')+'</button></form>'+
+    (b[key]?'<form data-form="logo-remove" data-slot="'+key+'"><button class="link">Remove</button></form>':'')+'</div>';
+  return '<section class="panel"><h2>Logo</h2><p class="muted">The group name is shown as text unless you switch the logo on. When it’s on, your logo replaces the name at the top of the site, in emails and on the pages that email buttons open.</p>'+
+    '<form data-form="logo-on"><label><input type="checkbox" name="on"'+(b.on?' checked':'')+'> Show the logo</label>'+(b.on&&!b.wide?'<p class="muted">Upload a wide logo below: until then the name is still shown as text.</p>':'')+'<button>Save</button></form>'+
+    slot('wide','Wide logo','For the top of pages and emails. PNG, JPG, GIF or WebP, up to 500 KB. A transparent background works best.')+
+    slot('square','Badge (optional)','A round or square version for the sign-in page.')+'</section>';
 }
 function organizersPanel(){
   const list=group.members||[], orgs=list.filter(m=>m.role==='organizer'&&m.status==='active'), pending=list.filter(m=>m.role==='organizer'&&m.status==='invited');
@@ -469,7 +485,7 @@ function wall(){
   const me=group.me, now=new Date();
   document.body.classList.add('night');
   root.innerHTML='<div class="wall">'+
-    '<div class="w-brand"><span class="w-mark"><img src="/brand/lockup.png" alt="Tower Press Artist Group" width="141" height="40"></span><span class="w-right">'+(realOrganizer()&&!preview?'<a class="w-org" href="/">Organizer</a>':'')+'<a class="w-avatar" href="#settings" aria-label="Your settings">'+esc(initials(me))+'</a></span></div>'+
+    '<div class="w-brand"><span class="w-mark">'+wordmark()+'</span><span class="w-right">'+(realOrganizer()&&!preview?'<a class="w-org" href="/">Organizer</a>':'')+'<a class="w-avatar" href="#settings" aria-label="Your settings">'+esc(initials(me))+'</a></span></div>'+
     '<div class="w-hero"><h1>On the<br><em>wall</em></h1><div class="w-date">'+esc(now.toLocaleDateString('en-GB',{weekday:'short'}).toUpperCase())+'<br>'+pad2(now.getDate())+'.'+pad2(now.getMonth()+1)+'.'+String(now.getFullYear()).slice(2)+'<br><span class="lime">WK '+isoWeek(now)+'</span></div></div>'+
     inTodayStrip()+
     '<section aria-label="Needs you" id="w-a">'+deckHtml()+'</section>'+
@@ -537,7 +553,7 @@ const outcomeText=o=>!o?'':({carried:'Carried',not_carried:'Not carried',agreed:
 const nightPages=new Set(['proposal','home','me','meetings','meeting','events','event','calls','call','settings','group','board','post','decisions','welcome']);
 function brandRow(){
   const me=group?.me;
-  return '<div class="w-brand"><a class="w-mark" href="'+(organizer()?'#me':'/')+'"><img src="/brand/lockup.png" alt="Tower Press Artist Group" width="141" height="40"></a><span class="w-right">'+(realOrganizer()&&!preview?'<a class="w-org" href="/">Organizer</a>':'')+(me?'<a class="w-avatar" href="#settings" aria-label="You">'+esc(initials(me))+'</a>':'')+'</span></div>';
+  return '<div class="w-brand"><a class="w-mark" href="'+(organizer()?'#me':'/')+'">'+wordmark()+'</a><span class="w-right">'+(realOrganizer()&&!preview?'<a class="w-org" href="/">Organizer</a>':'')+(me?'<a class="w-avatar" href="#settings" aria-label="You">'+esc(initials(me))+'</a>':'')+'</span></div>';
 }
 function backRow(href,label,context=''){
   return '<div class="n-back"><a href="'+href+'">← '+esc(label)+'</a><span>'+esc(context)+'</span></div>';
@@ -755,7 +771,7 @@ function settingsPage(){
 /* Sign in (screen 09): email, then a 6-digit code with a keypad. */
 let signStep='email', signAddr='', signCode='', signName='';
 function welcome(){
-  const poster='<div class="n-badge"><img src="/brand/badge.png" alt="Tower Press Artist Group" width="240" height="240"><span class="eyebrow">Members only</span></div>';
+  const poster=logo('square')?'<div class="n-badge"><img src="'+esc(logo('square'))+'" alt="'+esc(group?.group||'Tower Press Artist Group')+'"><span class="eyebrow">Members only</span></div>':'<div class="n-poster lime n-brandposter"><span class="tape"></span><span class="sq"></span><span class="eyebrow">Members only</span><span class="n-tp">Tower<br>Press</span><em class="n-org purple">Artist Group</em></div>';
   const setup='<form data-form="setup"><label>Organizer key<input type="password" name="organizerKey" required autocomplete="off"></label><label>Your name<input name="name" maxlength="80" required></label><label>Your email<input type="email" name="email" required maxlength="254"></label><button>Set up and sign in</button></form>';
   let body;
   if(signStep==='in'){
@@ -1028,6 +1044,16 @@ root.addEventListener('submit',ev=>{
       case 'add-members': result=await groupApi('add',{people:fields.people,role:data.has('organizer')?'organizer':'member'}); await refresh(); tell(result.notice); return;
       case 'promote': result=await groupApi('role',{member:fields.member,role:'organizer'}); await refresh(); tell(result.notice); return;
       case 'features': await groupApi('features',fields); await refresh(); tell('Saved. Members see the change right away.'); return;
+      case 'logo-on': await groupApi('branding',{on:data.has('on')}); await refresh(); tell(data.has('on')?'The logo is on.':'The logo is off: the group name shows as text.'); return;
+      case 'logo-upload': {
+        const file=data.get('file');
+        if(!file?.size)throw new Error('Choose an image first.');
+        if(file.size>500*1024)throw new Error('That image is too big. Keep it under 500 KB.');
+        const url=await new Promise((ok,fail)=>{const r=new FileReader();r.onload=()=>ok(r.result);r.onerror=()=>fail(new Error('Couldn’t read that file.'));r.readAsDataURL(file);});
+        await groupApi('branding',{[form.dataset.slot]:url}); await refresh();
+        tell('Uploaded.'+(group.brandingAdmin?.on?'':' Tick “Show the logo” and save to use it.')); return;
+      }
+      case 'logo-remove': await groupApi('branding',{remove:form.dataset.slot}); await refresh(); tell('Removed.'); return;
       case 'post': {const created=await postsApi('create',fields); location.hash='post/'+created.id; return;}
       case 'comment': await postsApi('comment',{kind:form.dataset.kind,target:form.dataset.target,body:fields.body}); await refresh(); tell('Reply posted.'); return;
       case 'new-meeting': {const created=await api('',fields,''); location.hash=created.id+'/manage'; return;}
