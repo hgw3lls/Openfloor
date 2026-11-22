@@ -10,7 +10,7 @@ else if(parts[0]==='post'&&isId(parts[1])){route.page='post';route.id=parts[1];}
 else if(parts[0]==='call'&&isId(parts[1])){route.page='call';route.id=parts[1];}
 else if(parts[0]==='proposal'&&isId(parts[1])){route.page='proposal';route.id=parts[1];}
 else if(parts[0]==='group'&&isId(parts[1])){route.page='group';route.id=parts[1];}
-else if(['organize','members','decisions','events','me','calls','meetings','board','settings','group'].includes(parts[0]))route.page=parts[0];
+else if(['organize','members','decisions','events','me','calls','meetings','board','settings','group','join','install'].includes(parts[0]))route.page=parts[0];
 
 const categories=['Discussion','Decision','Update'];
 const repeatLabels={'':'Does not repeat',weekly:'Every week',biweekly:'Every two weeks',monthly:'Every month (same weekday)'};
@@ -120,6 +120,22 @@ function installPanel(){
     (ios?'<ol><li>Open this page in <strong>Safari</strong>.</li><li>Tap the <strong>Share</strong> button (the square with an arrow).</li><li>Tap <strong>Add to Home Screen</strong>, then <strong>Add</strong>.</li><li>Open it from your home screen and sign in once. Ask for a sign-in email and type the 6-digit code from it.</li></ol>'
       :'<p><button type="button" data-action="install"'+(installPrompt?'':' hidden')+'>Install the app</button></p><p class="muted">No button? In Chrome, open the <strong>⋮</strong> menu and choose <strong>Add to Home screen</strong> or <strong>Install app</strong>.</p>')+
     '<p><button type="button" class="link" data-action="install-dismiss">Don’t show this again</button></p></section>';
+}
+// The page the "add to your home screen" QR code opens: steps for every kind of device.
+function installPage(){
+  const ios=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  const android=/Android/.test(navigator.userAgent);
+  const name=esc(group?.group||'Tower Press');
+  const steps={
+    ios:'<section class="panel"><h2>iPhone or iPad</h2><ol><li>Open this page in <strong>Safari</strong>.</li><li>Tap the <strong>Share</strong> button (the square with an arrow).</li><li>Scroll down and tap <strong>Add to Home Screen</strong>, then <strong>Add</strong>.</li></ol></section>',
+    android:'<section class="panel"><h2>Android</h2><ol><li>Open this page in <strong>Chrome</strong>.</li><li>Tap <strong>Install the app</strong> below, or open the <strong>⋮</strong> menu and choose <strong>Add to Home screen</strong> or <strong>Install app</strong>.</li></ol></section>',
+    desktop:'<section class="panel"><h2>Computer</h2><ul><li><strong>Chrome or Edge:</strong> click <strong>Install the app</strong> below, or the install icon at the right of the address bar.</li><li><strong>Safari on a Mac:</strong> choose <strong>File → Add to Dock</strong>.</li><li><strong>Any browser:</strong> bookmark this page or drag its address to your desktop.</li></ul></section>'
+  };
+  const order=ios?['ios','android','desktop']:android?['android','ios','desktop']:['desktop','ios','android'];
+  nightPage(brandRow()+titleBlock('Add to','your screen',['HOME SCREEN','DESKTOP','ONE TAP'])+
+    '<div class="n-pad">'+(standalone()?'<p><strong>You’re already using the app.</strong></p>':'<p>Save '+name+' to your phone’s home screen or your computer and it opens like an app.</p>')+
+    '<p><button type="button" data-action="install"'+(installPrompt?'':' hidden')+'>Install the app</button></p></div>'+
+    '<div class="n-panels">'+order.map(k=>steps[k]).join('')+'<section class="panel"><h2>Then</h2><p>Open it and sign in once: ask for a sign-in email and type the 6-digit code from it.</p><p><a href="/">Open '+name+' →</a></p></section></div>');
 }
 function codeForm(email){
   return '<form class="panel" data-form="code"><h2>Check your email</h2><p class="muted">Tap the link in the email, or type the 6-digit code from it here.</p><input type="hidden" name="email" value="'+esc(email)+'"><label>Code<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" maxlength="7" required></label><button>Sign in</button></form>';
@@ -784,12 +800,13 @@ function welcome(){
       '<div class="n-keys">'+keys+'</div><button type="button" class="n-textbtn" data-action="n-change">← Change email</button></div>';
   }else{
     body='<form class="n-signin" data-form="n-signin"><label><span class="eyebrow">Sign in with your studio email</span><input class="n-serif" type="email" name="email" required maxlength="254" autocomplete="email" placeholder="you@example.org" value="'+esc(signAddr)+'"></label><p class="n-hint flush">We’ll email you a 6-digit code. You won’t need a password.</p><button class="n-wide">Send me a code</button></form>'+
-      '<details class="n-add"><summary>Not a member yet? Ask to join</summary><form data-form="join"><p class="n-hint flush">An organizer will approve you, and you’ll get an email.</p><label>Name<input name="name" required maxlength="80" autocomplete="name"></label><label>Email<input type="email" name="email" required maxlength="254" autocomplete="email"></label>'+trap+'<button>Ask to join</button></form></details>';
+      '<details class="n-add" id="join"'+(route.page==='join'?' open':'')+'><summary>Not a member yet? Ask to join</summary><form data-form="join"><p class="n-hint flush">An organizer will approve you, and you’ll get an email.</p><label>Name<input name="name" required maxlength="80" autocomplete="name"></label><label>Email<input type="email" name="email" required maxlength="254" autocomplete="email"></label>'+trap+'<button>Ask to join</button></form></details>';
   }
   nightPage(poster+body+
     (group.needsSetup?'<div class="n-add open"><span class="eyebrow lime">Set up the group</span><p class="n-hint flush">No organizers yet. Enter the organizer key from Vercel to become the first organizer.</p>'+setup+'</div>'
       :signStep==='email'?'<details class="n-add"><summary>Organizer key</summary><p class="n-hint flush">Lost access? The organizer key from Vercel signs you in as an organizer.</p>'+setup+'</details>':''));
   if(signStep==='code')document.querySelector('#n-code')?.focus();
+  if(route.page==='join'&&signStep==='email'){const j=document.querySelector('#join');j?.scrollIntoView({block:'start'});j?.querySelector('input[name=name]')?.focus({preventScroll:true});}
 }
 async function signDigits(value){
   signCode=value.replace(/\D/g,'').slice(0,6);
@@ -959,6 +976,9 @@ async function reloadMeeting(){meeting=asMember(await api('',undefined,meeting.i
 
 async function show(){
   document.body.classList.remove('night');
+  // #install (home-screen help) works for everyone; #join opens the join form, or the wall if you're already in.
+  if(route.page==='install'){installPage();return;}
+  if(route.page==='join'&&group.me){location.hash='';return;}
   if(!group.me&&route.page!=='meeting'){welcome();return;}
   if((route.page==='organize'||route.page==='members')&&!organizer()){location.hash='';return;}
   switch(route.page){
